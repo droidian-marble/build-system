@@ -1,0 +1,135 @@
+name: Publish APT repository
+
+on:
+  workflow_run:
+    workflows:
+      - Build Droidian packages
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: apt-repository-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+      (github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure')
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout triggering revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - id: artifact
+        name: Check for publishable build artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          artifact_id="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.name == "apt-repo-input") | .id' | head -n1)"
+          if [[ -z "$artifact_id" ]]; then
+            echo "No apt-repo-input artifact was produced; nothing to publish."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: Download build packages
+        if: steps.artifact.outputs.available == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: apt-repo-input
+          path: ${{ runner.temp }}/incoming-packages
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: packages
+        name: Check downloaded packages
+        if: steps.artifact.outputs.available == 'true'
+        run: |
+          incoming="$RUNNER_TEMP/incoming-packages"
+          if find "$incoming" -type f -name '*.deb' -print -quit | grep -q .; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "path=$incoming" >> "$GITHUB_OUTPUT"
+          else
+            echo "No .deb packages were found; nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install repository tools
+        if: steps.packages.outputs.publish == 'true'
+        run: sudo apt-get update && sudo apt-get install -y apt-utils gnupg
+
+      - id: repository
+        name: Prepare APT repository
+        if: steps.packages.outputs.publish == 'true'
+        env:
+          APT_REPO_GPG_PRIVATE_KEY: ${{ secrets.APT_REPO_GPG_PRIVATE_KEY }}
+          APT_REPO_GPG_PASSPHRASE: ${{ secrets.APT_REPO_GPG_PASSPHRASE }}
+          INCOMING_DIR: ${{ steps.packages.outputs.path }}
+        run: |
+          repo_dir="$RUNNER_TEMP/apt-repo"
+          if git ls-remote --exit-code --heads origin apt-repo; then
+            git fetch origin apt-repo:refs/remotes/origin/apt-repo
+            git worktree add --force -B apt-repo "$repo_dir" refs/remotes/origin/apt-repo
+          else
+            git worktree add --detach "$repo_dir" HEAD
+            git -C "$repo_dir" switch --orphan apt-repo
+          fi
+          ./scripts/publish-apt-repo.sh "$INCOMING_DIR" "$repo_dir"
+          echo "path=$repo_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Save APT repository state
+        if: steps.packages.outputs.publish == 'true'
+        env:
+          APT_REPO_DIR: ${{ steps.repository.outputs.path }}
+        run: |
+          git -C "$APT_REPO_DIR" config user.name "github-actions[bot]"
+          git -C "$APT_REPO_DIR" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$APT_REPO_DIR" add -A
+          if ! git -C "$APT_REPO_DIR" diff --cached --quiet; then
+            git -C "$APT_REPO_DIR" commit -m "Update APT repository"
+            git -C "$APT_REPO_DIR" push origin HEAD:apt-repo
+          fi
+
+      - id: pages
+        name: Prepare Pages directory
+        if: steps.packages.outputs.publish == 'true'
+        env:
+          APT_REPO_DIR: ${{ steps.repository.outputs.path }}
+        run: |
+          pages_dir="$RUNNER_TEMP/apt-repo-pages"
+          mkdir -p "$pages_dir"
+          cp -a "$APT_REPO_DIR"/. "$pages_dir"/
+          rm -f "$pages_dir/.git"
+          echo "path=$pages_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Configure GitHub Pages
+        if: steps.packages.outputs.publish == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        if: steps.packages.outputs.publish == 'true'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ steps.pages.outputs.path }}
+
+      - name: Deploy APT repository to GitHub Pages
+        if: steps.packages.outputs.publish == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v4

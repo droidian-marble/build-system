@@ -72,6 +72,7 @@ jobs:
           pattern: partial-*
           path: collected
           merge-multiple: true
+
       - name: Create ZIP
         id: zip
         run: |
@@ -83,6 +84,16 @@ jobs:
           mv collected droidian-packages-arm64
           zip -r droidian-packages-arm64.zip droidian-packages-arm64
           echo "created=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APT repository input
+        if: steps.zip.outputs.created == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: apt-repo-input
+          path: droidian-packages-arm64/**/*.deb
+          if-no-files-found: ignore
+          retention-days: 1
+
       - name: Upload final ZIP
         if: steps.zip.outputs.created == 'true'
         uses: actions/upload-artifact@v7
