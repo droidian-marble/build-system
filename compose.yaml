@@ -1,0 +1,24 @@
+services:
+  builder:
+    network_mode: host
+    image: ${DROIDIAN_BUILD_IMAGE:?DROIDIAN_BUILD_IMAGE is required}
+    platform: linux/arm64
+    working_dir: /buildd
+    environment:
+      PROJECT_NAME: ${PROJECT_NAME:?PROJECT_NAME is required}
+      PROJECT_REPO: ${PROJECT_REPO:?PROJECT_REPO is required}
+      PROJECT_BRANCH: ${PROJECT_BRANCH:?PROJECT_BRANCH is required}
+      PROJECT_APT_PACKAGES: ${PROJECT_APT_PACKAGES:-}
+      PROJECT_BEFORE_BUILD_B64: ${PROJECT_BEFORE_BUILD_B64:-}
+      PROJECT_DEPENDENCIES_B64: ${PROJECT_DEPENDENCIES_B64:-}
+      DEB_BUILD_OPTIONS: ${PROJECT_DEB_BUILD_OPTIONS:-nocheck}
+      DEBFULLNAME: ${PROJECT_DEBFULLNAME:-Droidian Patch Builder}
+      DEBEMAIL: ${PROJECT_DEBEMAIL:-builder@localhost}
+      RELENG_FULL_BUILD: "yes"
+    volumes:
+      - ${PROJECT_WORK_DIR:?PROJECT_WORK_DIR is required}:/buildd:Z
+      - ${PROJECT_PATCH_DIR:?PROJECT_PATCH_DIR is required}:/patches:ro,Z
+      - ${DEPENDENCY_OUTPUT_ROOT:?DEPENDENCY_OUTPUT_ROOT is required}:/dependencies:ro,Z
+      - ${PROJECT_OUTPUT_DIR:?PROJECT_OUTPUT_DIR is required}:/output:Z
+      - ./scripts/container-build.sh:/usr/local/bin/droidian-container-build:ro,Z
+    entrypoint: ["/usr/local/bin/droidian-container-build"]

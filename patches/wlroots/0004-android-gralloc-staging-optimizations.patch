@@ -1,0 +1,1007 @@
+diff --git a/include/render/android.h b/include/render/android.h
+index fad80df0..e135a78d 100644
+--- a/include/render/android.h
++++ b/include/render/android.h
+@@ -1,6 +1,8 @@
+ #ifndef RENDER_ANDROID_H
+ #define RENDER_ANDROID_H
+ 
++#include <stddef.h>
++#include <stdint.h>
+ #include <wlr/render/android.h>
+ #include <wlr/render/egl.h>
+ #include <wlr/render/gles2.h>
+@@ -17,7 +19,36 @@ struct wlr_android_renderer {
+ 
+ 	struct wl_list buffers; // wlr_gles2_buffer.link
+ 	struct wlr_drm_format_set shm_formats;
++
+ 	bool dmabuf_staging;
++	bool dmabuf_staging_hwc;
++	bool dmabuf_staging_bgra;
++	bool dmabuf_staging_neon;
++	bool dmabuf_stats;
++	size_t dmabuf_staging_pool_max;
++	size_t dmabuf_staging_pool_len;
++	size_t dmabuf_coalesce_rects;
++	struct wl_list dmabuf_staging_pool;
++
++	struct {
++		uint64_t window_start_ns;
++		uint64_t updates;
++		uint64_t full_copies;
++		uint64_t damage_updates;
++		uint64_t coalesced_updates;
++		uint64_t direct_updates;
++		uint64_t neon_updates;
++		uint64_t scalar_updates;
++		uint64_t copied_bytes;
++		uint64_t lock_ns;
++		uint64_t copy_ns;
++		uint64_t unlock_ns;
++		uint64_t pool_hits;
++		uint64_t pool_misses;
++		uint64_t bgra_fallbacks;
++		uint64_t generic_fallbacks;
++		uint64_t failures;
++	} dmabuf_staging_stats;
+ };
+ 
+ struct wlr_android_buffer {
+diff --git a/include/render/gles2.h b/include/render/gles2.h
+index e002fecd..1a198022 100644
+--- a/include/render/gles2.h
++++ b/include/render/gles2.h
+@@ -34,6 +34,7 @@ struct wlr_gles2_tex_shader {
+ 	GLint tex_proj;
+ 	GLint tex;
+ 	GLint alpha;
++	GLint force_opaque;
+ 	GLint pos_attrib;
+ };
+ 
+diff --git a/render/android/renderer.c b/render/android/renderer.c
+index 49527a5f..9898623d 100644
+--- a/render/android/renderer.c
++++ b/render/android/renderer.c
+@@ -1,7 +1,13 @@
+ #define _POSIX_C_SOURCE 199309L
+ #include <assert.h>
++#include <inttypes.h>
++#include <stdint.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <time.h>
++#if defined(__aarch64__) || defined(__ARM_NEON)
++#include <arm_neon.h>
++#endif
+ #include <android/hardware/gralloc.h>
+ #include "render/android.h"
+ #include "render/egl.h"
+@@ -48,12 +54,113 @@ int hybris_gralloc_lock(buffer_handle_t handle, int usage, int l, int t,
+ int hybris_gralloc_unlock(buffer_handle_t handle);
+ 
+ struct wlr_android_staging_buffer {
++	struct wl_list pool_link;
++	struct wlr_android_renderer *renderer;
+ 	ANativeWindowBuffer native_buffer;
+ 	buffer_handle_t handle;
+ 	uint32_t stride;
++	uint32_t source_format;
++	int android_format;
++	int usage;
+ 	int refs;
+ };
+ 
++static uint64_t android_monotonic_nsec(void) {
++	struct timespec ts;
++	clock_gettime(CLOCK_MONOTONIC, &ts);
++	return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
++}
++
++static bool android_env_enabled(const char *name, bool default_value) {
++	const char *value = getenv(name);
++	if (value == NULL) {
++		return default_value;
++	}
++	if (strcmp(value, "1") == 0) {
++		return true;
++	}
++	if (strcmp(value, "0") == 0) {
++		return false;
++	}
++	return default_value;
++}
++
++static size_t android_env_size(const char *name, size_t default_value,
++		size_t max_value) {
++	const char *value = getenv(name);
++	if (value == NULL || *value == '\0') {
++		return default_value;
++	}
++
++	char *end = NULL;
++	unsigned long parsed = strtoul(value, &end, 10);
++	if (end == value || *end != '\0') {
++		return default_value;
++	}
++	if (parsed > max_value) {
++		parsed = max_value;
++	}
++	return (size_t)parsed;
++}
++
++static void android_staging_stats_maybe_log(
++		struct wlr_android_renderer *renderer, uint64_t now_ns) {
++	if (!renderer->dmabuf_stats) {
++		return;
++	}
++
++	if (renderer->dmabuf_staging_stats.window_start_ns == 0) {
++		renderer->dmabuf_staging_stats.window_start_ns = now_ns;
++		return;
++	}
++
++	uint64_t elapsed_ns = now_ns -
++		renderer->dmabuf_staging_stats.window_start_ns;
++	if (elapsed_ns < 1000000000ull) {
++		return;
++	}
++
++	double elapsed_s = (double)elapsed_ns / 1000000000.0;
++	uint64_t updates = renderer->dmabuf_staging_stats.updates;
++	double copy_mib_s = elapsed_s > 0.0 ?
++		(double)renderer->dmabuf_staging_stats.copied_bytes /
++		(1024.0 * 1024.0 * elapsed_s) : 0.0;
++	double lock_ms = updates > 0 ?
++		(double)renderer->dmabuf_staging_stats.lock_ns /
++		(double)updates / 1000000.0 : 0.0;
++	double copy_ms = updates > 0 ?
++		(double)renderer->dmabuf_staging_stats.copy_ns /
++		(double)updates / 1000000.0 : 0.0;
++	double unlock_ms = updates > 0 ?
++		(double)renderer->dmabuf_staging_stats.unlock_ns /
++		(double)updates / 1000000.0 : 0.0;
++
++	wlr_log(WLR_INFO,
++		"Android dmabuf staging stats: updates=%" PRIu64
++		" full=%" PRIu64 " damage=%" PRIu64 " coalesced=%" PRIu64
++		" direct=%" PRIu64 " neon=%" PRIu64 " scalar=%" PRIu64
++		" copy=%.1f MiB/s lock=%.3fms copy_cpu=%.3fms unlock=%.3fms"
++		" pool=%" PRIu64 "/%" PRIu64 " bgra_fallback=%" PRIu64
++		" generic_fallback=%" PRIu64 " failures=%" PRIu64,
++		updates,
++		renderer->dmabuf_staging_stats.full_copies,
++		renderer->dmabuf_staging_stats.damage_updates,
++		renderer->dmabuf_staging_stats.coalesced_updates,
++		renderer->dmabuf_staging_stats.direct_updates,
++		renderer->dmabuf_staging_stats.neon_updates,
++		renderer->dmabuf_staging_stats.scalar_updates,
++		copy_mib_s, lock_ms, copy_ms, unlock_ms,
++		renderer->dmabuf_staging_stats.pool_hits,
++		renderer->dmabuf_staging_stats.pool_misses,
++		renderer->dmabuf_staging_stats.bgra_fallbacks,
++		renderer->dmabuf_staging_stats.generic_fallbacks,
++		renderer->dmabuf_staging_stats.failures);
++
++	memset(&renderer->dmabuf_staging_stats, 0,
++		sizeof(renderer->dmabuf_staging_stats));
++	renderer->dmabuf_staging_stats.window_start_ns = now_ns;
++}
++
+ static void android_staging_incref(struct android_native_base_t *base) {
+ 	struct wlr_android_staging_buffer *staging;
+ 	staging = wl_container_of((ANativeWindowBuffer *)base, staging, native_buffer);
+@@ -66,306 +173,466 @@ static void android_staging_decref(struct android_native_base_t *base) {
+ 	__sync_fetch_and_sub(&staging->refs, 1);
+ }
+ 
++static void android_staging_release_buffer(
++		struct wlr_android_staging_buffer *staging) {
++	if (staging == NULL) {
++		return;
++	}
++	if (staging->handle != NULL) {
++		hybris_gralloc_release(staging->handle, 1);
++	}
++	free(staging);
++}
++
++static struct wlr_android_staging_buffer *android_staging_pool_take(
++		struct wlr_android_renderer *renderer, int width, int height,
++		int android_format, int usage) {
++	struct wlr_android_staging_buffer *staging;
++	wl_list_for_each(staging, &renderer->dmabuf_staging_pool, pool_link) {
++		if (staging->native_buffer.width != width ||
++				staging->native_buffer.height != height ||
++				staging->android_format != android_format ||
++				staging->usage != usage) {
++			continue;
++		}
++
++		wl_list_remove(&staging->pool_link);
++		renderer->dmabuf_staging_pool_len--;
++		staging->refs = 1;
++		if (renderer->dmabuf_stats) {
++			renderer->dmabuf_staging_stats.pool_hits++;
++		}
++		return staging;
++	}
++
++	if (renderer->dmabuf_stats) {
++		renderer->dmabuf_staging_stats.pool_misses++;
++	}
++	return NULL;
++}
++
++static void android_staging_pool_put(
++		struct wlr_android_staging_buffer *staging) {
++	struct wlr_android_renderer *renderer = staging->renderer;
++	if (renderer->dmabuf_staging_pool_max == 0 ||
++			renderer->dmabuf_staging_pool_len >=
++			renderer->dmabuf_staging_pool_max) {
++		android_staging_release_buffer(staging);
++		return;
++	}
++
++	wl_list_insert(&renderer->dmabuf_staging_pool, &staging->pool_link);
++	renderer->dmabuf_staging_pool_len++;
++}
++
++static void android_staging_pool_finish(
++		struct wlr_android_renderer *renderer) {
++	struct wlr_android_staging_buffer *staging, *tmp;
++	wl_list_for_each_safe(staging, tmp,
++			&renderer->dmabuf_staging_pool, pool_link) {
++		wl_list_remove(&staging->pool_link);
++		android_staging_release_buffer(staging);
++	}
++	renderer->dmabuf_staging_pool_len = 0;
++}
++
++static struct wlr_android_staging_buffer *android_staging_allocate(
++		struct wlr_android_renderer *renderer, int width, int height,
++		int android_format, int usage) {
++	struct wlr_android_staging_buffer *staging =
++		android_staging_pool_take(renderer, width, height,
++			android_format, usage);
++	if (staging != NULL) {
++		return staging;
++	}
++
++	staging = calloc(1, sizeof(*staging));
++	if (staging == NULL) {
++		return NULL;
++	}
++
++	staging->renderer = renderer;
++	staging->android_format = android_format;
++	staging->usage = usage;
++	staging->refs = 1;
++
++	uint32_t stride = 0;
++	int ret = hybris_gralloc_allocate(width, height, android_format,
++		usage, &staging->handle, &stride);
++	if (ret != 0 || staging->handle == NULL) {
++		wlr_log(WLR_DEBUG,
++			"Failed to allocate Android staging format 0x%x: %d",
++			android_format, ret);
++		free(staging);
++		return NULL;
++	}
++
++	staging->stride = stride;
++	staging->native_buffer.common.magic = ANDROID_NATIVE_BUFFER_MAGIC;
++	staging->native_buffer.common.version = sizeof(ANativeWindowBuffer);
++	staging->native_buffer.common.incRef = android_staging_incref;
++	staging->native_buffer.common.decRef = android_staging_decref;
++	memset(staging->native_buffer.common.reserved, 0,
++		sizeof(staging->native_buffer.common.reserved));
++	staging->native_buffer.width = width;
++	staging->native_buffer.height = height;
++	staging->native_buffer.stride = stride;
++	staging->native_buffer.format = android_format;
++	staging->native_buffer.usage = usage;
++	staging->native_buffer.handle = staging->handle;
++
++	return staging;
++}
++
++static bool android_swizzle_bgra_to_rgba(uint8_t *dst, const uint8_t *src,
++		size_t pixels, bool force_opaque, bool enable_neon) {
++	bool used_neon = false;
++
++#if defined(__aarch64__) || defined(__ARM_NEON)
++	if (enable_neon) {
++		const uint8x16_t opaque = vdupq_n_u8(0xff);
++		while (pixels >= 16) {
++			uint8x16x4_t in = vld4q_u8(src);
++			uint8x16x4_t out;
++			out.val[0] = in.val[2];
++			out.val[1] = in.val[1];
++			out.val[2] = in.val[0];
++			out.val[3] = force_opaque ? opaque : in.val[3];
++			vst4q_u8(dst, out);
++			src += 16 * 4;
++			dst += 16 * 4;
++			pixels -= 16;
++			used_neon = true;
++		}
++	}
++#else
++	(void)enable_neon;
++#endif
++
++	while (pixels-- > 0) {
++		dst[0] = src[2];
++		dst[1] = src[1];
++		dst[2] = src[0];
++		dst[3] = force_opaque ? 0xff : src[3];
++		src += 4;
++		dst += 4;
++	}
++
++	return used_neon;
++}
++
+ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 		struct wlr_buffer *buffer, const pixman_region32_t *damage) {
++	struct wlr_android_renderer *renderer = staging->renderer;
+ 	void *src_data = NULL;
+ 	uint32_t src_format = DRM_FORMAT_INVALID;
+ 	size_t src_stride = 0;
+ 	if (!wlr_buffer_begin_data_ptr_access(buffer,
+-			WLR_BUFFER_DATA_PTR_ACCESS_READ, &src_data, &src_format, &src_stride)) {
++			WLR_BUFFER_DATA_PTR_ACCESS_READ, &src_data, &src_format,
++			&src_stride)) {
++		if (renderer->dmabuf_stats) {
++			renderer->dmabuf_staging_stats.failures++;
++		}
+ 		return false;
+ 	}
+ 
+ 	bool ok = false;
+-	if ((src_format != DRM_FORMAT_ARGB8888 && src_format != DRM_FORMAT_XRGB8888) ||
++	bool region_initialized = false;
++	pixman_region32_t copy_region;
++
++	if ((src_format != DRM_FORMAT_ARGB8888 &&
++			src_format != DRM_FORMAT_XRGB8888) ||
++			staging->source_format != src_format ||
+ 			buffer->width != staging->native_buffer.width ||
+ 			buffer->height != staging->native_buffer.height ||
++			staging->stride < (uint32_t)buffer->width ||
+ 			src_stride < (size_t)buffer->width * 4) {
+ 		goto out_src;
+ 	}
+ 
+-	void *dst_data = NULL;
+-	int ret = hybris_gralloc_lock(staging->handle, GRALLOC_USAGE_SW_WRITE_OFTEN,
+-		0, 0, buffer->width, buffer->height, &dst_data);
+-	if (ret != 0 || dst_data == NULL) {
+-		wlr_log(WLR_ERROR, "Failed to lock Android staging gralloc buffer: %d", ret);
+-		goto out_src;
++	pixman_region32_init_rect(&copy_region, 0, 0,
++		buffer->width, buffer->height);
++	region_initialized = true;
++	if (damage != NULL) {
++		pixman_region32_intersect(&copy_region, &copy_region, damage);
+ 	}
+-
+-	pixman_region32_t full_damage;
+-	const pixman_region32_t *copy_damage = damage;
+-	if (copy_damage == NULL) {
+-		pixman_region32_init_rect(&full_damage, 0, 0,
+-			buffer->width, buffer->height);
+-		copy_damage = &full_damage;
++	if (!pixman_region32_not_empty(&copy_region)) {
++		ok = true;
++		goto out_region;
+ 	}
+ 
+ 	int rects_len = 0;
+ 	const pixman_box32_t *rects =
+-		pixman_region32_rectangles(copy_damage, &rects_len);
++		pixman_region32_rectangles(&copy_region, &rects_len);
++	const pixman_box32_t *bounds = pixman_region32_extents(&copy_region);
+ 
++	uint64_t damage_area = 0;
+ 	for (int i = 0; i < rects_len; i++) {
+-		int x1 = rects[i].x1 < 0 ? 0 : rects[i].x1;
+-		int y1 = rects[i].y1 < 0 ? 0 : rects[i].y1;
+-		int x2 = rects[i].x2 > buffer->width ?
+-			buffer->width : rects[i].x2;
+-		int y2 = rects[i].y2 > buffer->height ?
+-			buffer->height : rects[i].y2;
+-
+-		if (x1 >= x2 || y1 >= y2) {
++		damage_area += (uint64_t)(rects[i].x2 - rects[i].x1) *
++			(uint64_t)(rects[i].y2 - rects[i].y1);
++	}
++	uint64_t bounds_area = (uint64_t)(bounds->x2 - bounds->x1) *
++		(uint64_t)(bounds->y2 - bounds->y1);
++
++	bool coalesced = renderer->dmabuf_coalesce_rects > 0 &&
++		(size_t)rects_len > renderer->dmabuf_coalesce_rects &&
++		bounds_area <= damage_area * 2;
++	pixman_box32_t coalesced_rect;
++	if (coalesced) {
++		coalesced_rect = *bounds;
++		rects = &coalesced_rect;
++		rects_len = 1;
++	}
++
++	void *dst_data = NULL;
++	uint64_t lock_start = 0;
++	uint64_t lock_end = 0;
++	uint64_t copy_end = 0;
++	uint64_t unlock_end = 0;
++	if (renderer->dmabuf_stats) {
++		lock_start = android_monotonic_nsec();
++	}
++
++	int ret = hybris_gralloc_lock(staging->handle,
++		GRALLOC_USAGE_SW_WRITE_OFTEN,
++		bounds->x1, bounds->y1,
++		bounds->x2 - bounds->x1, bounds->y2 - bounds->y1,
++		&dst_data);
++	if (renderer->dmabuf_stats) {
++		lock_end = android_monotonic_nsec();
++	}
++	if (ret != 0 || dst_data == NULL) {
++		wlr_log(WLR_ERROR,
++			"Failed to lock Android staging gralloc buffer: %d", ret);
++		if (renderer->dmabuf_stats) {
++			renderer->dmabuf_staging_stats.failures++;
++		}
++		goto out_region;
++	}
++
++	bool direct_copy = staging->android_format == HAL_PIXEL_FORMAT_BGRA_8888;
++	bool used_neon = false;
++	uint64_t copied_bytes = 0;
++	size_t dst_stride = (size_t)staging->stride * 4;
++
++	for (int i = 0; i < rects_len; i++) {
++		int x1 = rects[i].x1;
++		int y1 = rects[i].y1;
++		int x2 = rects[i].x2;
++		int y2 = rects[i].y2;
++		size_t width = (size_t)(x2 - x1);
++		size_t height = (size_t)(y2 - y1);
++		copied_bytes += (uint64_t)width * (uint64_t)height * 4;
++
++		if (direct_copy && x1 == 0 && x2 == buffer->width &&
++				src_stride == dst_stride) {
++			memcpy((uint8_t *)dst_data + (size_t)y1 * dst_stride,
++				(const uint8_t *)src_data + (size_t)y1 * src_stride,
++				height * src_stride);
+ 			continue;
+ 		}
+ 
+ 		for (int y = y1; y < y2; y++) {
+-			const uint32_t *src =
+-				(const uint32_t *)((const char *)src_data +
+-				(size_t)y * src_stride) + x1;
+-
+-			uint32_t *dst =
+-				(uint32_t *)dst_data +
+-				(size_t)y * staging->stride + x1;
+-
+-			for (int x = x1; x < x2; x++) {
+-				uint32_t pixel = *src++;
+-
+-				uint32_t alpha =
+-					src_format == DRM_FORMAT_XRGB8888 ?
+-					0xFF000000u :
+-					pixel & 0xFF000000u;
+-
+-				uint32_t red =
+-					(pixel >> 16) & 0xFFu;
+-				uint32_t green =
+-					(pixel >> 8) & 0xFFu;
+-				uint32_t blue =
+-					pixel & 0xFFu;
+-
+-				/*
+-				 * DRM ARGB/XRGB8888 is BGRA/BGRX in
+-				 * little-endian memory. Android
+-				 * HAL_PIXEL_FORMAT_RGBA_8888 expects
+-				 * RGBA byte order.
+-				 */
+-				*dst++ =
+-					alpha |
+-					(blue << 16) |
+-					(green << 8) |
+-					red;
++			const uint8_t *src = (const uint8_t *)src_data +
++				(size_t)y * src_stride + (size_t)x1 * 4;
++			uint8_t *dst = (uint8_t *)dst_data +
++				(size_t)y * dst_stride + (size_t)x1 * 4;
++
++			if (direct_copy) {
++				memcpy(dst, src, width * 4);
++			} else {
++				used_neon |= android_swizzle_bgra_to_rgba(dst, src, width,
++					src_format == DRM_FORMAT_XRGB8888,
++					renderer->dmabuf_staging_neon);
+ 			}
+ 		}
+ 	}
+ 
+-	if (copy_damage == &full_damage) {
+-		pixman_region32_fini(&full_damage);
++	if (renderer->dmabuf_stats) {
++		copy_end = android_monotonic_nsec();
+ 	}
+ 
+ 	ret = hybris_gralloc_unlock(staging->handle);
++	if (renderer->dmabuf_stats) {
++		unlock_end = android_monotonic_nsec();
++	}
+ 	if (ret != 0) {
+ 		wlr_log(WLR_ERROR,
+-			"Failed to unlock Android staging gralloc buffer: %d",
+-			ret);
+-		goto out_src;
++			"Failed to unlock Android staging gralloc buffer: %d", ret);
++		if (renderer->dmabuf_stats) {
++			renderer->dmabuf_staging_stats.failures++;
++		}
++		goto out_region;
++	}
++
++	if (renderer->dmabuf_stats) {
++		bool full_copy = rects_len == 1 && rects[0].x1 == 0 &&
++			rects[0].y1 == 0 && rects[0].x2 == buffer->width &&
++			rects[0].y2 == buffer->height;
++		renderer->dmabuf_staging_stats.updates++;
++		renderer->dmabuf_staging_stats.copied_bytes += copied_bytes;
++		renderer->dmabuf_staging_stats.lock_ns += lock_end - lock_start;
++		renderer->dmabuf_staging_stats.copy_ns += copy_end - lock_end;
++		renderer->dmabuf_staging_stats.unlock_ns += unlock_end - copy_end;
++		if (full_copy) {
++			renderer->dmabuf_staging_stats.full_copies++;
++		} else {
++			renderer->dmabuf_staging_stats.damage_updates++;
++		}
++		if (coalesced) {
++			renderer->dmabuf_staging_stats.coalesced_updates++;
++		}
++		if (direct_copy) {
++			renderer->dmabuf_staging_stats.direct_updates++;
++		} else if (used_neon) {
++			renderer->dmabuf_staging_stats.neon_updates++;
++		} else {
++			renderer->dmabuf_staging_stats.scalar_updates++;
++		}
++		android_staging_stats_maybe_log(renderer, unlock_end);
+ 	}
+ 
+ 	ok = true;
+ 
++out_region:
++	if (region_initialized) {
++		pixman_region32_fini(&copy_region);
++	}
+ out_src:
+ 	wlr_buffer_end_data_ptr_access(buffer);
+ 	return ok;
+ }
+ 
+-static bool android_staging_texture_update(
+-		struct wlr_gles2_texture *texture,
+-		struct wlr_buffer *buffer,
+-		const pixman_region32_t *damage) {
+-	struct wlr_android_staging_buffer *staging =
+-		texture->external_data;
+-
++static bool android_staging_texture_update(struct wlr_gles2_texture *texture,
++		struct wlr_buffer *buffer, const pixman_region32_t *damage) {
++	struct wlr_android_staging_buffer *staging = texture->external_data;
+ 	return android_staging_copy(staging, buffer, damage);
+ }
+ 
+-static void android_staging_texture_destroy(
+-		struct wlr_gles2_texture *texture) {
+-	struct wlr_android_staging_buffer *staging =
+-		texture->external_data;
+-
++static void android_staging_texture_destroy(struct wlr_gles2_texture *texture) {
++	struct wlr_android_staging_buffer *staging = texture->external_data;
+ 	if (staging == NULL) {
+ 		return;
+ 	}
+-
+-	hybris_gralloc_release(staging->handle, 1);
+-	free(staging);
++	android_staging_pool_put(staging);
+ }
+ 
+-static struct wlr_texture *android_texture_from_dmabuf_staging(
+-		struct wlr_renderer *wlr_renderer,
+-		struct wlr_buffer *buffer,
+-		const struct wlr_dmabuf_attributes *dmabuf) {
+-	if (dmabuf->n_planes != 1 ||
+-			(dmabuf->format != DRM_FORMAT_ARGB8888 &&
+-			dmabuf->format != DRM_FORMAT_XRGB8888) ||
+-			(dmabuf->modifier != DRM_FORMAT_MOD_LINEAR &&
+-			dmabuf->modifier != DRM_FORMAT_MOD_INVALID)) {
+-		return NULL;
+-	}
+-
+-	struct wlr_gles2_renderer *gles2 =
+-		android_get_gles2_renderer(wlr_renderer);
++static struct wlr_texture *android_texture_from_dmabuf_staging_format(
++		struct wlr_renderer *wlr_renderer, struct wlr_buffer *buffer,
++		const struct wlr_dmabuf_attributes *dmabuf, int android_format) {
++	struct wlr_android_renderer *renderer = android_get_renderer(wlr_renderer);
++	struct wlr_gles2_renderer *gles2 = android_get_gles2_renderer(wlr_renderer);
+ 
+-	if (gles2->procs.glEGLImageTargetTexture2DOES == NULL ||
+-			gles2->egl->procs.eglCreateImageKHR == NULL) {
+-		return NULL;
++	int usage = GRALLOC_USAGE_SW_WRITE_OFTEN | GRALLOC_USAGE_HW_TEXTURE;
++	if (renderer->dmabuf_staging_hwc) {
++		usage |= GRALLOC_USAGE_HW_COMPOSER;
+ 	}
+ 
+ 	struct wlr_android_staging_buffer *staging =
+-		calloc(1, sizeof(*staging));
++		android_staging_allocate(renderer, buffer->width, buffer->height,
++			android_format, usage);
+ 	if (staging == NULL) {
+ 		return NULL;
+ 	}
+-
+-	int usage =
+-		GRALLOC_USAGE_SW_WRITE_OFTEN |
+-		GRALLOC_USAGE_HW_TEXTURE |
+-		GRALLOC_USAGE_HW_COMPOSER;
+-
+-	uint32_t stride = 0;
+-
+-	int ret = hybris_gralloc_allocate(
+-		buffer->width,
+-		buffer->height,
+-		HAL_PIXEL_FORMAT_RGBA_8888,
+-		usage,
+-		&staging->handle,
+-		&stride);
+-
+-	if (ret != 0 || staging->handle == NULL) {
+-		wlr_log(WLR_ERROR,
+-			"Failed to allocate Android staging gralloc buffer: %d",
+-			ret);
+-		free(staging);
+-		return NULL;
+-	}
+-
+-	staging->stride = stride;
+-	staging->refs = 1;
+-
+-	staging->native_buffer.common.magic =
+-		ANDROID_NATIVE_BUFFER_MAGIC;
+-	staging->native_buffer.common.version =
+-		sizeof(ANativeWindowBuffer);
+-	staging->native_buffer.common.incRef =
+-		android_staging_incref;
+-	staging->native_buffer.common.decRef =
+-		android_staging_decref;
+-
+-	memset(
+-		staging->native_buffer.common.reserved,
+-		0,
+-		sizeof(staging->native_buffer.common.reserved));
+-
+-	staging->native_buffer.width = buffer->width;
+-	staging->native_buffer.height = buffer->height;
+-	staging->native_buffer.stride = stride;
+-	staging->native_buffer.format =
+-		HAL_PIXEL_FORMAT_RGBA_8888;
+-	staging->native_buffer.usage = usage;
+-	staging->native_buffer.handle = staging->handle;
+-
+-	if (!android_staging_copy(staging, buffer, NULL)) {
+-		hybris_gralloc_release(staging->handle, 1);
+-		free(staging);
+-		return NULL;
+-	}
++	staging->source_format = dmabuf->format;
+ 
+ 	struct wlr_egl_context prev_ctx;
+ 	wlr_egl_save_context(&prev_ctx);
+ 	wlr_egl_make_current(gles2->egl);
+ 
+-	const EGLint attribs[] = {
+-		EGL_NONE,
+-	};
+-
+-	EGLImageKHR image =
+-		gles2->egl->procs.eglCreateImageKHR(
+-			gles2->egl->display,
+-			EGL_NO_CONTEXT,
+-			EGL_NATIVE_BUFFER_ANDROID,
+-			(EGLClientBuffer)&staging->native_buffer,
+-			attribs);
+-
++	const EGLint attribs[] = { EGL_NONE };
++	EGLImageKHR image = gles2->egl->procs.eglCreateImageKHR(
++		gles2->egl->display, EGL_NO_CONTEXT, EGL_NATIVE_BUFFER_ANDROID,
++		(EGLClientBuffer)&staging->native_buffer, attribs);
+ 	if (image == EGL_NO_IMAGE_KHR) {
+-		wlr_log(WLR_ERROR,
+-			"Failed to create EGLImage from Android gralloc staging buffer");
+-
++		wlr_log(WLR_DEBUG,
++			"Failed to create EGLImage from Android staging format 0x%x",
++			android_format);
+ 		wlr_egl_restore_context(&prev_ctx);
+-		hybris_gralloc_release(staging->handle, 1);
+-		free(staging);
++		android_staging_release_buffer(staging);
+ 		return NULL;
+ 	}
+ 
+-	struct wlr_gles2_texture *texture =
+-		gles2_texture_create(
+-			gles2,
+-			buffer->width,
+-			buffer->height);
+-
++	struct wlr_gles2_texture *texture = gles2_texture_create(gles2,
++		buffer->width, buffer->height);
+ 	if (texture == NULL) {
+ 		wlr_egl_destroy_image(gles2->egl, image);
+ 		wlr_egl_restore_context(&prev_ctx);
+-		hybris_gralloc_release(staging->handle, 1);
+-		free(staging);
++		android_staging_release_buffer(staging);
+ 		return NULL;
+ 	}
+ 
+ 	texture->target = GL_TEXTURE_EXTERNAL_OES;
+ 	texture->image = image;
+-	texture->has_alpha =
+-		dmabuf->format == DRM_FORMAT_ARGB8888;
++	texture->has_alpha = dmabuf->format == DRM_FORMAT_ARGB8888;
+ 	texture->drm_format = DRM_FORMAT_INVALID;
+ 
+-	texture->external_update =
+-		android_staging_texture_update;
+-	texture->external_destroy =
+-		android_staging_texture_destroy;
+-	texture->external_data = staging;
+-
+ 	push_gles2_debug(gles2);
+-
+ 	glGenTextures(1, &texture->tex);
+-	glBindTexture(
+-		GL_TEXTURE_EXTERNAL_OES,
+-		texture->tex);
+-
+-	glTexParameteri(
+-		GL_TEXTURE_EXTERNAL_OES,
+-		GL_TEXTURE_WRAP_S,
++	glBindTexture(GL_TEXTURE_EXTERNAL_OES, texture->tex);
++	glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S,
+ 		GL_CLAMP_TO_EDGE);
+-
+-	glTexParameteri(
+-		GL_TEXTURE_EXTERNAL_OES,
+-		GL_TEXTURE_WRAP_T,
++	glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,
+ 		GL_CLAMP_TO_EDGE);
+-
+-	gles2->procs.glEGLImageTargetTexture2DOES(
+-		GL_TEXTURE_EXTERNAL_OES,
++	gles2->procs.glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES,
+ 		image);
+-
+-	glBindTexture(
+-		GL_TEXTURE_EXTERNAL_OES,
+-		0);
+-
++	glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
+ 	pop_gles2_debug(gles2);
+-
+ 	wlr_egl_restore_context(&prev_ctx);
+ 
++	if (!android_staging_copy(staging, buffer, NULL)) {
++		gles2_texture_destroy(texture);
++		android_staging_release_buffer(staging);
++		return NULL;
++	}
++
++	texture->external_update = android_staging_texture_update;
++	texture->external_destroy = android_staging_texture_destroy;
++	texture->external_data = staging;
++
+ 	wlr_log(WLR_DEBUG,
+-		"Using Android gralloc staging bridge for %dx%d linux-dmabuf",
+-		buffer->width,
+-		buffer->height);
++		"Using Android %s gralloc staging bridge for %dx%d linux-dmabuf",
++		android_format == HAL_PIXEL_FORMAT_BGRA_8888 ? "BGRA/direct" :
++			"RGBA/swizzle",
++		buffer->width, buffer->height);
+ 
+ 	return &texture->wlr_texture;
+ }
+ 
++static struct wlr_texture *android_texture_from_dmabuf_staging(
++		struct wlr_renderer *wlr_renderer, struct wlr_buffer *buffer,
++		const struct wlr_dmabuf_attributes *dmabuf) {
++	if (dmabuf->n_planes != 1 ||
++			(dmabuf->format != DRM_FORMAT_ARGB8888 &&
++			dmabuf->format != DRM_FORMAT_XRGB8888) ||
++			(dmabuf->modifier != DRM_FORMAT_MOD_LINEAR &&
++			dmabuf->modifier != DRM_FORMAT_MOD_INVALID)) {
++		return NULL;
++	}
++
++	struct wlr_android_renderer *renderer = android_get_renderer(wlr_renderer);
++	struct wlr_gles2_renderer *gles2 = android_get_gles2_renderer(wlr_renderer);
++	if (gles2->procs.glEGLImageTargetTexture2DOES == NULL ||
++			gles2->egl->procs.eglCreateImageKHR == NULL) {
++		return NULL;
++	}
++
++	if (renderer->dmabuf_staging_bgra) {
++		struct wlr_texture *texture =
++			android_texture_from_dmabuf_staging_format(wlr_renderer,
++				buffer, dmabuf, HAL_PIXEL_FORMAT_BGRA_8888);
++		if (texture != NULL) {
++			return texture;
++		}
++		if (renderer->dmabuf_stats) {
++			renderer->dmabuf_staging_stats.bgra_fallbacks++;
++		}
++	}
++
++	return android_texture_from_dmabuf_staging_format(wlr_renderer,
++		buffer, dmabuf, HAL_PIXEL_FORMAT_RGBA_8888);
++}
++
+ //
+ // wl_drm compat
+ // Reintroduced and reworked for 0.17.x from these reverted commits:
+@@ -534,6 +801,7 @@ static void android_destroy(struct wlr_renderer *wlr_renderer) {
+ 	}
+ 
+ 	renderer->wlr_gles_renderer->impl->destroy(renderer->wlr_gles_renderer);
++	android_staging_pool_finish(renderer);
+ }
+ 
+ static bool android_bind_buffer_for_output(struct wlr_renderer *wlr_renderer,
+@@ -662,17 +930,18 @@ static struct wlr_texture *android_texture_from_buffer(struct wlr_renderer *wlr_
+ 		texture = gles2_texture_from_wl_drm(wlr_renderer, ((struct wlr_android_wlegl_buffer *)wlr_buffer)->inner.resource);
+ 	} else {
+ 		struct wlr_dmabuf_attributes dmabuf;
+-		if (renderer->dmabuf_staging &&
+-				wlr_buffer_get_dmabuf(wlr_buffer, &dmabuf)) {
+-			texture = android_texture_from_dmabuf_staging(
+-				wlr_renderer, wlr_buffer, &dmabuf);
++		if (renderer->dmabuf_staging && wlr_buffer_get_dmabuf(wlr_buffer, &dmabuf)) {
++			texture = android_texture_from_dmabuf_staging(wlr_renderer, wlr_buffer, &dmabuf);
+ 			if (texture != NULL) {
+ 				return texture;
+ 			}
++			if (renderer->dmabuf_stats) {
++				renderer->dmabuf_staging_stats.generic_fallbacks++;
++			}
++			wlr_log(WLR_DEBUG,
++				"Android gralloc staging unavailable, using GLES CPU-upload fallback");
+ 		}
+-
+-		texture = renderer->wlr_gles_renderer->impl->texture_from_buffer(
+-			renderer->wlr_gles_renderer, wlr_buffer);
++		texture = renderer->wlr_gles_renderer->impl->texture_from_buffer(renderer->wlr_gles_renderer, wlr_buffer);
+ 	}
+ 
+ 	return texture;
+@@ -775,21 +1044,41 @@ struct wlr_renderer *wlr_android_renderer_create(void) {
+ 	}
+ 
+ 	wl_list_init(&renderer->buffers);
++	wl_list_init(&renderer->dmabuf_staging_pool);
+ 	wlr_renderer_init(&renderer->wlr_renderer, &renderer_impl);
+ 	renderer->egl = egl;
+ 
+-	const char *dmabuf_staging =
+-		getenv("WLR_ANDROID_DMABUF_STAGING");
+-
+-	renderer->dmabuf_staging =
+-		dmabuf_staging != NULL &&
+-		strcmp(dmabuf_staging, "1") == 0;
++	renderer->dmabuf_staging = android_env_enabled(
++		"WLR_ANDROID_DMABUF_STAGING", true);
++	renderer->dmabuf_staging_hwc = android_env_enabled(
++		"WLR_ANDROID_DMABUF_STAGING_HWC", true);
++	renderer->dmabuf_staging_bgra = android_env_enabled(
++		"WLR_ANDROID_DMABUF_STAGING_BGRA", true);
++	renderer->dmabuf_staging_neon = android_env_enabled(
++		"WLR_ANDROID_DMABUF_STAGING_NEON", true);
++	renderer->dmabuf_stats = android_env_enabled(
++		"WLR_ANDROID_DMABUF_STATS", false);
++	renderer->dmabuf_staging_pool_max = android_env_size(
++		"WLR_ANDROID_DMABUF_STAGING_POOL", 2, 8);
++	renderer->dmabuf_coalesce_rects = android_env_size(
++		"WLR_ANDROID_DMABUF_COALESCE_RECTS", 8, 64);
++
++	if (renderer->dmabuf_stats) {
++		renderer->dmabuf_staging_stats.window_start_ns =
++			android_monotonic_nsec();
++	}
+ 
+ 	if (renderer->dmabuf_staging) {
+ 		wlr_log(WLR_INFO,
+-			"Android linux-dmabuf gralloc staging bridge enabled");
++			"Android linux-dmabuf gralloc staging enabled: "
++			"bgra=%d hwc=%d neon=%d pool=%zu coalesce=%zu stats=%d",
++			renderer->dmabuf_staging_bgra,
++			renderer->dmabuf_staging_hwc,
++			renderer->dmabuf_staging_neon,
++			renderer->dmabuf_staging_pool_max,
++			renderer->dmabuf_coalesce_rects,
++			renderer->dmabuf_stats);
+ 	}
+-
+ 	wlr_drm_format_set_add(&renderer->shm_formats, DRM_FORMAT_XRGB8888, DRM_FORMAT_MOD_LINEAR);
+ 	wlr_drm_format_set_add(&renderer->shm_formats, DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR);
+ 
+diff --git a/render/gles2/pass.c b/render/gles2/pass.c
+index 4adad49f..f66f1aa8 100644
+--- a/render/gles2/pass.c
++++ b/render/gles2/pass.c
+@@ -196,6 +196,9 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
+ 
+ 	glUniform1i(shader->tex, 0);
+ 	glUniform1f(shader->alpha, alpha);
++	if (texture->target == GL_TEXTURE_EXTERNAL_OES) {
++		glUniform1i(shader->force_opaque, texture->has_alpha ? GL_FALSE : GL_TRUE);
++	}
+ 	set_proj_matrix(shader->proj, pass->projection_matrix, &dst_box);
+ 	set_tex_matrix(shader->tex_proj, options->transform, &src_fbox);
+ 
+diff --git a/render/gles2/renderer.c b/render/gles2/renderer.c
+index c047cec5..df37af31 100644
+--- a/render/gles2/renderer.c
++++ b/render/gles2/renderer.c
+@@ -335,6 +335,9 @@ static bool gles2_render_subtexture_with_matrix(
+ 	glUniformMatrix3fv(shader->proj, 1, GL_FALSE, gl_matrix);
+ 	glUniform1i(shader->tex, 0);
+ 	glUniform1f(shader->alpha, alpha);
++	if (texture->target == GL_TEXTURE_EXTERNAL_OES) {
++		glUniform1i(shader->force_opaque, texture->has_alpha ? GL_FALSE : GL_TRUE);
++	}
+ 
+ 	float tex_matrix[9];
+ 	wlr_matrix_identity(tex_matrix);
+@@ -975,6 +978,7 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
+ 		renderer->shaders.tex_ext.tex_proj = glGetUniformLocation(prog, "tex_proj");
+ 		renderer->shaders.tex_ext.tex = glGetUniformLocation(prog, "tex");
+ 		renderer->shaders.tex_ext.alpha = glGetUniformLocation(prog, "alpha");
++		renderer->shaders.tex_ext.force_opaque = glGetUniformLocation(prog, "force_opaque");
+ 		renderer->shaders.tex_ext.pos_attrib = glGetAttribLocation(prog, "pos");
+ 	}
+ 
+diff --git a/render/gles2/shaders/tex_external.frag b/render/gles2/shaders/tex_external.frag
+index 1f6d832f..07f5b021 100644
+--- a/render/gles2/shaders/tex_external.frag
++++ b/render/gles2/shaders/tex_external.frag
+@@ -9,7 +9,13 @@ precision mediump float;
+ varying vec2 v_texcoord;
+ uniform samplerExternalOES tex;
+ uniform float alpha;
++uniform bool force_opaque;
+ 
+ void main() {
+-	gl_FragColor = texture2D(tex, v_texcoord) * alpha;
++	vec4 color = texture2D(tex, v_texcoord);
++	if (force_opaque) {
++		color.a = 1.0;
++	}
++	gl_FragColor = color * alpha;
+ }
++

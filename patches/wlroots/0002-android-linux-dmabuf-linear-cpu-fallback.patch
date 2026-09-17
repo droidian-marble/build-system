@@ -1,0 +1,325 @@
+--- a/include/wlr/types/wlr_linux_dmabuf_v1.h
++++ b/include/wlr/types/wlr_linux_dmabuf_v1.h
+@@ -7,10 +7,12 @@
+ #endif
+ 
+ #ifndef WLR_TYPES_WLR_LINUX_DMABUF_H
+ #define WLR_TYPES_WLR_LINUX_DMABUF_H
+ 
++#include <stdbool.h>
++#include <stddef.h>
+ #include <stdint.h>
+ #include <sys/stat.h>
+ #include <wayland-server-core.h>
+ #include <wlr/types/wlr_buffer.h>
+ #include <wlr/render/dmabuf.h>
+@@ -21,10 +23,14 @@
+ struct wlr_dmabuf_v1_buffer {
+ 	struct wlr_buffer base;
+ 
+ 	struct wl_resource *resource; // can be NULL if the client destroyed it
+ 	struct wlr_dmabuf_attributes attributes;
++
++	void *mapped_data;
++	size_t mapped_size;
++	bool data_access_active;
+ 
+ 	// private state
+ 
+ 	struct wl_listener release;
+ };
+@@ -74,10 +80,20 @@
+  */
+ struct wlr_linux_dmabuf_v1 *wlr_linux_dmabuf_v1_create(struct wl_display *display,
+ 	uint32_t version, const struct wlr_linux_dmabuf_feedback_v1 *default_feedback);
+ 
+ /**
++ * Create a legacy linux-dmabuf global without a DRM device.
++ *
++ * This is intended for renderers which can consume CPU-mappable linear
++ * DMA-BUFs but don't expose a DRM render node. Version must be <= 3.
++ */
++struct wlr_linux_dmabuf_v1 *wlr_linux_dmabuf_v1_create_legacy(
++	struct wl_display *display, uint32_t version,
++	const struct wlr_drm_format_set *formats);
++
++/**
+  * Create the linux-dmabuf-unstable-v1 global.
+  *
+  * The default DMA-BUF feedback is initialized from the struct wlr_renderer.
+  */
+ struct wlr_linux_dmabuf_v1 *wlr_linux_dmabuf_v1_create_with_renderer(struct wl_display *display,
+--- a/types/wlr_linux_dmabuf_v1.c
++++ b/types/wlr_linux_dmabuf_v1.c
+@@ -1,10 +1,14 @@
+ #define _POSIX_C_SOURCE 200809L
+ #include <assert.h>
+ #include <drm_fourcc.h>
++#include <errno.h>
+ #include <fcntl.h>
++#include <linux/dma-buf.h>
++#include <stdint.h>
+ #include <stdlib.h>
++#include <sys/ioctl.h>
+ #include <sys/mman.h>
+ #include <unistd.h>
+ #include <wlr/backend.h>
+ #include <wlr/interfaces/wlr_buffer.h>
+ #include <wlr/render/wlr_renderer.h>
+@@ -99,10 +103,13 @@
+ 	struct wlr_dmabuf_v1_buffer *buffer =
+ 		dmabuf_v1_buffer_from_buffer(wlr_buffer);
+ 	if (buffer->resource != NULL) {
+ 		wl_resource_set_user_data(buffer->resource, NULL);
+ 	}
++	if (buffer->mapped_data != NULL) {
++		munmap(buffer->mapped_data, buffer->mapped_size);
++	}
+ 	wlr_dmabuf_attributes_finish(&buffer->attributes);
+ 	wl_list_remove(&buffer->release.link);
+ 	free(buffer);
+ }
+ 
+@@ -112,13 +119,111 @@
+ 		dmabuf_v1_buffer_from_buffer(wlr_buffer);
+ 	*attribs = buffer->attributes;
+ 	return true;
+ }
+ 
++static bool buffer_begin_data_ptr_access(struct wlr_buffer *wlr_buffer,
++		uint32_t flags, void **data, uint32_t *format, size_t *stride) {
++	struct wlr_dmabuf_v1_buffer *buffer =
++		dmabuf_v1_buffer_from_buffer(wlr_buffer);
++	struct wlr_dmabuf_attributes *attribs = &buffer->attributes;
++
++	if (!(flags & WLR_BUFFER_DATA_PTR_ACCESS_READ) ||
++			(flags & WLR_BUFFER_DATA_PTR_ACCESS_WRITE)) {
++		return false;
++	}
++
++	if (attribs->n_planes != 1) {
++		wlr_log(WLR_DEBUG,
++			"Android DMA-BUF CPU fallback only supports single-plane buffers");
++		return false;
++	}
++
++	if (attribs->format != DRM_FORMAT_ARGB8888 &&
++			attribs->format != DRM_FORMAT_XRGB8888) {
++		wlr_log(WLR_DEBUG,
++			"Android DMA-BUF CPU fallback rejected format 0x%"PRIX32,
++			attribs->format);
++		return false;
++	}
++
++	if (attribs->modifier != DRM_FORMAT_MOD_LINEAR &&
++			attribs->modifier != DRM_FORMAT_MOD_INVALID) {
++		wlr_log(WLR_DEBUG,
++			"Android DMA-BUF CPU fallback rejected non-linear modifier");
++		return false;
++	}
++
++	uint64_t map_size =
++		(uint64_t)attribs->offset[0] +
++		(uint64_t)attribs->stride[0] * (uint64_t)wlr_buffer->height;
++
++	if (map_size == 0 || map_size > SIZE_MAX) {
++		return false;
++	}
++
++	if (buffer->mapped_data == NULL) {
++		buffer->mapped_data = mmap(NULL, (size_t)map_size, PROT_READ,
++			MAP_SHARED, attribs->fd[0], 0);
++		if (buffer->mapped_data == MAP_FAILED) {
++			buffer->mapped_data = NULL;
++			wlr_log_errno(WLR_ERROR,
++				"Failed to mmap Android linux-dmabuf buffer");
++			return false;
++		}
++		buffer->mapped_size = (size_t)map_size;
++
++		wlr_log(WLR_INFO,
++			"Mapped Android linux-dmabuf buffer: %dx%d stride=%u format=0x%"PRIX32,
++			wlr_buffer->width, wlr_buffer->height,
++			attribs->stride[0], attribs->format);
++	}
++
++	struct dma_buf_sync sync = {
++		.flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ,
++	};
++
++	if (ioctl(attribs->fd[0], DMA_BUF_IOCTL_SYNC, &sync) == 0) {
++		buffer->data_access_active = true;
++	} else if (errno != ENOTTY && errno != EINVAL && errno != ENOSYS) {
++		wlr_log_errno(WLR_ERROR,
++			"DMA_BUF_IOCTL_SYNC START failed");
++		return false;
++	}
++
++	*data = (uint8_t *)buffer->mapped_data + attribs->offset[0];
++	*format = attribs->format;
++	*stride = attribs->stride[0];
++	return true;
++}
++
++static void buffer_end_data_ptr_access(struct wlr_buffer *wlr_buffer) {
++	struct wlr_dmabuf_v1_buffer *buffer =
++		dmabuf_v1_buffer_from_buffer(wlr_buffer);
++
++	if (!buffer->data_access_active) {
++		return;
++	}
++
++	struct dma_buf_sync sync = {
++		.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ,
++	};
++
++	if (ioctl(buffer->attributes.fd[0], DMA_BUF_IOCTL_SYNC, &sync) != 0 &&
++			errno != ENOTTY && errno != EINVAL && errno != ENOSYS) {
++		wlr_log_errno(WLR_ERROR,
++			"DMA_BUF_IOCTL_SYNC END failed");
++	}
++
++	buffer->data_access_active = false;
++}
++
+ static const struct wlr_buffer_impl buffer_impl = {
+ 	.destroy = buffer_destroy,
+ 	.get_dmabuf = buffer_get_dmabuf,
++	.begin_data_ptr_access = buffer_begin_data_ptr_access,
++	.end_data_ptr_access = buffer_end_data_ptr_access,
+ };
+ 
+ static void buffer_handle_release(struct wl_listener *listener, void *data) {
+ 	struct wlr_dmabuf_v1_buffer *buffer =
+ 		wl_container_of(listener, buffer, release);
+@@ -978,10 +1083,55 @@
+ error_linux_dmabuf:
+ 	free(linux_dmabuf);
+ 	return NULL;
+ }
+ 
++struct wlr_linux_dmabuf_v1 *wlr_linux_dmabuf_v1_create_legacy(
++		struct wl_display *display, uint32_t version,
++		const struct wlr_drm_format_set *formats) {
++	assert(version <= 3);
++
++	if (formats == NULL || formats->len == 0) {
++		return NULL;
++	}
++
++	struct wlr_linux_dmabuf_v1 *linux_dmabuf = calloc(1, sizeof(*linux_dmabuf));
++	if (linux_dmabuf == NULL) {
++		return NULL;
++	}
++
++	linux_dmabuf->main_device_fd = -1;
++
++	wl_list_init(&linux_dmabuf->surfaces);
++	wl_signal_init(&linux_dmabuf->events.destroy);
++
++	linux_dmabuf->global = wl_global_create(display,
++		&zwp_linux_dmabuf_v1_interface, version,
++		linux_dmabuf, linux_dmabuf_bind);
++	if (linux_dmabuf->global == NULL) {
++		free(linux_dmabuf);
++		return NULL;
++	}
++
++	if (!wlr_drm_format_set_copy(&linux_dmabuf->default_formats, formats)) {
++		wl_global_destroy(linux_dmabuf->global);
++		free(linux_dmabuf);
++		return NULL;
++	}
++
++	linux_dmabuf->display_destroy.notify = handle_display_destroy;
++	wl_display_add_destroy_listener(display, &linux_dmabuf->display_destroy);
++
++	wlr_buffer_register_resource_interface(&buffer_resource_interface);
++
++	wlr_log(WLR_INFO,
++		"Created legacy linux-dmabuf v%u global without DRM device",
++		version);
++
++	return linux_dmabuf;
++}
++
+ struct wlr_linux_dmabuf_v1 *wlr_linux_dmabuf_v1_create_with_renderer(struct wl_display *display,
+ 		uint32_t version, struct wlr_renderer *renderer) {
+ 	const struct wlr_linux_dmabuf_feedback_v1_init_options options = {
+ 		.main_renderer = renderer,
+ 	};
+--- a/render/gles2/texture.c
++++ b/render/gles2/texture.c
+@@ -355,21 +355,28 @@
+ 
+ 	void *data;
+ 	uint32_t format;
+ 	size_t stride;
+ 	struct wlr_dmabuf_attributes dmabuf;
+-	if (wlr_buffer_get_dmabuf(buffer, &dmabuf)) {
+-		return gles2_texture_from_dmabuf_buffer(renderer, buffer, &dmabuf);
+-	} else if (wlr_buffer_begin_data_ptr_access(buffer,
++	if (wlr_buffer_get_dmabuf(buffer, &dmabuf) &&
++			renderer->egl->exts.EXT_image_dma_buf_import) {
++		struct wlr_texture *tex =
++			gles2_texture_from_dmabuf_buffer(renderer, buffer, &dmabuf);
++		if (tex != NULL) {
++			return tex;
++		}
++	}
++
++	if (wlr_buffer_begin_data_ptr_access(buffer,
+ 			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &format, &stride)) {
+ 		struct wlr_texture *tex = gles2_texture_from_pixels(wlr_renderer,
+ 			format, stride, buffer->width, buffer->height, data);
+ 		wlr_buffer_end_data_ptr_access(buffer);
+ 		return tex;
+-	} else {
+-		return NULL;
+-	}
++	}
++
++	return NULL;
+ }
+ 
+ void wlr_gles2_texture_get_attribs(struct wlr_texture *wlr_texture,
+ 		struct wlr_gles2_texture_attribs *attribs) {
+ 	struct wlr_gles2_texture *texture = gles2_get_texture(wlr_texture);
+--- a/render/android/renderer.c
++++ b/render/android/renderer.c
+@@ -6,10 +6,11 @@
+ #include "render/gles2.h"
+ #include "types/wlr_matrix.h"
+ #include "wlr/types/wlr_android_wlegl.h"
+ #include "backend/hwcomposer.h"
+ #include <drm_fourcc.h>
++#include <wlr/types/wlr_linux_dmabuf_v1.h>
+ 
+ static const struct wlr_renderer_impl renderer_impl;
+ 
+ bool wlr_renderer_is_android(struct wlr_renderer *wlr_renderer) {
+ 	if (!wlr_renderer) {
+@@ -445,9 +446,22 @@
+ 
+ bool wlr_android_renderer_init_wl_display(struct wlr_renderer *wlr_renderer,
+ 		struct wl_display *wl_display) {
+ 	struct wlr_android_renderer *renderer = android_get_renderer(wlr_renderer);
+ 
+-	wlr_android_wlegl_create(wl_display, wlr_renderer);
++	if (wlr_android_wlegl_create(wl_display, wlr_renderer) == NULL) {
++		wlr_log(WLR_ERROR, "Failed to create android_wlegl global");
++		return false;
++	}
++
++	if (wlr_linux_dmabuf_v1_create_legacy(wl_display, 3,
++			&renderer->shm_formats) == NULL) {
++		wlr_log(WLR_ERROR,
++			"Failed to create Android legacy linux-dmabuf global");
++		return false;
++	}
++
++	wlr_log(WLR_INFO,
++		"Android renderer enabled linear linux-dmabuf CPU fallback");
+ 
+ 	return true;
+ }

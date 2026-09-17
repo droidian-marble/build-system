@@ -1,0 +1,191 @@
+diff --git a/include/render/android.h b/include/render/android.h
+index e135a78d..fddf5acf 100644
+--- a/include/render/android.h
++++ b/include/render/android.h
+@@ -23,6 +23,7 @@ struct wlr_android_renderer {
+ 	bool dmabuf_staging;
+ 	bool dmabuf_staging_hwc;
+ 	bool dmabuf_staging_bgra;
++	bool dmabuf_staging_bgra_runtime_disabled;
+ 	bool dmabuf_staging_neon;
+ 	bool dmabuf_stats;
+ 	size_t dmabuf_staging_pool_max;
+@@ -46,6 +47,9 @@ struct wlr_android_renderer {
+ 		uint64_t pool_hits;
+ 		uint64_t pool_misses;
+ 		uint64_t bgra_fallbacks;
++		uint64_t bgra_runtime_disables;
++		uint64_t eglimage_failures;
++		uint64_t gl_import_failures;
+ 		uint64_t generic_fallbacks;
+ 		uint64_t failures;
+ 	} dmabuf_staging_stats;
+diff --git a/include/render/egl.h b/include/render/egl.h
+index 3c444d0e..1d0c5029 100644
+--- a/include/render/egl.h
++++ b/include/render/egl.h
+@@ -29,6 +29,7 @@ struct wlr_egl {
+ 		bool KHR_display_reference;
+ 
+ 		// Android extensions
++		bool ANDROID_image_native_buffer;
+ 		bool bind_wayland_display_wl;
+ 		bool partial_update_ext;
+ 		bool swap_buffers_with_damage;
+diff --git a/render/android/renderer.c b/render/android/renderer.c
+index 9898623d..50f5bf62 100644
+--- a/render/android/renderer.c
++++ b/render/android/renderer.c
+@@ -141,7 +141,9 @@ static void android_staging_stats_maybe_log(
+ 		" direct=%" PRIu64 " neon=%" PRIu64 " scalar=%" PRIu64
+ 		" copy=%.1f MiB/s lock=%.3fms copy_cpu=%.3fms unlock=%.3fms"
+ 		" pool=%" PRIu64 "/%" PRIu64 " bgra_fallback=%" PRIu64
+-		" generic_fallback=%" PRIu64 " failures=%" PRIu64,
++		" bgra_disabled=%" PRIu64 " eglimage_fail=%" PRIu64
++		" gl_import_fail=%" PRIu64 " generic_fallback=%" PRIu64
++		" failures=%" PRIu64,
+ 		updates,
+ 		renderer->dmabuf_staging_stats.full_copies,
+ 		renderer->dmabuf_staging_stats.damage_updates,
+@@ -153,6 +155,9 @@ static void android_staging_stats_maybe_log(
+ 		renderer->dmabuf_staging_stats.pool_hits,
+ 		renderer->dmabuf_staging_stats.pool_misses,
+ 		renderer->dmabuf_staging_stats.bgra_fallbacks,
++		renderer->dmabuf_staging_stats.bgra_runtime_disables,
++		renderer->dmabuf_staging_stats.eglimage_failures,
++		renderer->dmabuf_staging_stats.gl_import_failures,
+ 		renderer->dmabuf_staging_stats.generic_fallbacks,
+ 		renderer->dmabuf_staging_stats.failures);
+ 
+@@ -519,7 +524,9 @@ static void android_staging_texture_destroy(struct wlr_gles2_texture *texture) {
+ 
+ static struct wlr_texture *android_texture_from_dmabuf_staging_format(
+ 		struct wlr_renderer *wlr_renderer, struct wlr_buffer *buffer,
+-		const struct wlr_dmabuf_attributes *dmabuf, int android_format) {
++		const struct wlr_dmabuf_attributes *dmabuf, int android_format,
++		bool *format_rejected) {
++	*format_rejected = false;
+ 	struct wlr_android_renderer *renderer = android_get_renderer(wlr_renderer);
+ 	struct wlr_gles2_renderer *gles2 = android_get_gles2_renderer(wlr_renderer);
+ 
+@@ -548,6 +555,10 @@ static struct wlr_texture *android_texture_from_dmabuf_staging_format(
+ 		wlr_log(WLR_DEBUG,
+ 			"Failed to create EGLImage from Android staging format 0x%x",
+ 			android_format);
++		*format_rejected = true;
++		if (renderer->dmabuf_stats) {
++			renderer->dmabuf_staging_stats.eglimage_failures++;
++		}
+ 		wlr_egl_restore_context(&prev_ctx);
+ 		android_staging_release_buffer(staging);
+ 		return NULL;
+@@ -574,10 +585,30 @@ static struct wlr_texture *android_texture_from_dmabuf_staging_format(
+ 		GL_CLAMP_TO_EDGE);
+ 	glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,
+ 		GL_CLAMP_TO_EDGE);
++
++	while (glGetError() != GL_NO_ERROR) {
++		// Discard stale GL errors before validating the native-buffer import.
++	}
+ 	gles2->procs.glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES,
+ 		image);
++	GLenum import_error = glGetError();
+ 	glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
+ 	pop_gles2_debug(gles2);
++
++	if (import_error != GL_NO_ERROR) {
++		wlr_log(WLR_DEBUG,
++			"Failed to bind Android staging EGLImage format 0x%x: GL error 0x%x",
++			android_format, import_error);
++		*format_rejected = true;
++		if (renderer->dmabuf_stats) {
++			renderer->dmabuf_staging_stats.gl_import_failures++;
++		}
++		gles2_texture_destroy(texture);
++		wlr_egl_restore_context(&prev_ctx);
++		android_staging_release_buffer(staging);
++		return NULL;
++	}
++
+ 	wlr_egl_restore_context(&prev_ctx);
+ 
+ 	if (!android_staging_copy(staging, buffer, NULL)) {
+@@ -612,25 +643,40 @@ static struct wlr_texture *android_texture_from_dmabuf_staging(
+ 
+ 	struct wlr_android_renderer *renderer = android_get_renderer(wlr_renderer);
+ 	struct wlr_gles2_renderer *gles2 = android_get_gles2_renderer(wlr_renderer);
+-	if (gles2->procs.glEGLImageTargetTexture2DOES == NULL ||
++	if (!gles2->egl->exts.KHR_image_base ||
++			!gles2->egl->exts.ANDROID_image_native_buffer ||
++			!gles2->exts.OES_egl_image_external ||
++			gles2->procs.glEGLImageTargetTexture2DOES == NULL ||
+ 			gles2->egl->procs.eglCreateImageKHR == NULL) {
+ 		return NULL;
+ 	}
+ 
+-	if (renderer->dmabuf_staging_bgra) {
++	if (renderer->dmabuf_staging_bgra &&
++			!renderer->dmabuf_staging_bgra_runtime_disabled) {
++		bool format_rejected = false;
+ 		struct wlr_texture *texture =
+ 			android_texture_from_dmabuf_staging_format(wlr_renderer,
+-				buffer, dmabuf, HAL_PIXEL_FORMAT_BGRA_8888);
++				buffer, dmabuf, HAL_PIXEL_FORMAT_BGRA_8888,
++				&format_rejected);
+ 		if (texture != NULL) {
+ 			return texture;
+ 		}
+ 		if (renderer->dmabuf_stats) {
+ 			renderer->dmabuf_staging_stats.bgra_fallbacks++;
+ 		}
++		if (format_rejected) {
++			renderer->dmabuf_staging_bgra_runtime_disabled = true;
++			if (renderer->dmabuf_stats) {
++				renderer->dmabuf_staging_stats.bgra_runtime_disables++;
++			}
++			wlr_log(WLR_INFO,
++				"Android BGRA staging import rejected; disabling BGRA fast path for this renderer");
++		}
+ 	}
+ 
++	bool format_rejected = false;
+ 	return android_texture_from_dmabuf_staging_format(wlr_renderer,
+-		buffer, dmabuf, HAL_PIXEL_FORMAT_RGBA_8888);
++		buffer, dmabuf, HAL_PIXEL_FORMAT_RGBA_8888, &format_rejected);
+ }
+ 
+ //
+@@ -1068,6 +1114,19 @@ struct wlr_renderer *wlr_android_renderer_create(void) {
+ 			android_monotonic_nsec();
+ 	}
+ 
++	struct wlr_gles2_renderer *gles2 =
++		gles2_get_renderer(renderer->wlr_gles_renderer);
++	if (renderer->dmabuf_staging &&
++			(!egl->exts.KHR_image_base ||
++			!egl->exts.ANDROID_image_native_buffer ||
++			!gles2->exts.OES_egl_image_external ||
++			gles2->procs.glEGLImageTargetTexture2DOES == NULL ||
++			egl->procs.eglCreateImageKHR == NULL)) {
++		wlr_log(WLR_ERROR,
++			"Android dmabuf staging requested but native-buffer EGL/GLES support is incomplete");
++		renderer->dmabuf_staging = false;
++	}
++
+ 	if (renderer->dmabuf_staging) {
+ 		wlr_log(WLR_INFO,
+ 			"Android linux-dmabuf gralloc staging enabled: "
+diff --git a/render/egl.c b/render/egl.c
+index e2bfa55b..32ccbe04 100644
+--- a/render/egl.c
++++ b/render/egl.c
+@@ -320,6 +320,9 @@ static bool egl_init_display(struct wlr_egl *egl, EGLDisplay display, bool is_an
+ 		load_egl_proc(&egl->procs.eglDestroyImageKHR, "eglDestroyImageKHR");
+ 	}
+ 
++	egl->exts.ANDROID_image_native_buffer =
++		check_egl_ext(display_exts_str, "EGL_ANDROID_image_native_buffer");
++
+ 	egl->exts.buffer_age_ext =
+ 		check_egl_ext(display_exts_str, "EGL_EXT_buffer_age");
+ 

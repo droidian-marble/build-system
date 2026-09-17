@@ -1,0 +1,427 @@
+diff --git a/include/render/android_vulkan_bridge.h b/include/render/android_vulkan_bridge.h
+index ae63898..cdbcb57 100644
+--- a/include/render/android_vulkan_bridge.h
++++ b/include/render/android_vulkan_bridge.h
+@@ -18,12 +18,16 @@ struct wlr_android_vk_copy_result {
+ 	int release_sync_fd;
+ 	bool used_native_fence;
+ 	bool native_fence_fallback;
++	bool native_sync_failed;
++	bool submitted;
++	bool completion_unknown;
+ };
+ 
+ struct wlr_android_vk_bridge *wlr_android_vk_bridge_create(void);
+ void wlr_android_vk_bridge_destroy(struct wlr_android_vk_bridge *bridge);
+ bool wlr_android_vk_bridge_supports_native_fence(
+ 	struct wlr_android_vk_bridge *bridge);
++bool wlr_android_vk_bridge_wait_idle(struct wlr_android_vk_bridge *bridge);
+ 
+ bool wlr_android_vk_bridge_copy(struct wlr_android_vk_bridge *bridge,
+ 	struct wlr_buffer *source_buffer,
+diff --git a/render/android/renderer.c b/render/android/renderer.c
+index 6f29bd5..a5a4f64 100644
+--- a/render/android/renderer.c
++++ b/render/android/renderer.c
+@@ -644,6 +644,18 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 		struct wlr_buffer *buffer, const pixman_region32_t *damage) {
+ 	struct wlr_android_renderer *renderer = staging->renderer;
+ 	bool ok = false;
++
++	struct wlr_dmabuf_attributes source_dmabuf = {0};
++	bool have_source_dmabuf = wlr_buffer_get_dmabuf(buffer, &source_dmabuf);
++	if (!have_source_dmabuf || source_dmabuf.n_planes != 1 ||
++			source_dmabuf.format != staging->source_format ||
++			(source_dmabuf.modifier != DRM_FORMAT_MOD_LINEAR &&
++			source_dmabuf.modifier != DRM_FORMAT_MOD_INVALID) ||
++			buffer->width != staging->native_buffer.width ||
++			buffer->height != staging->native_buffer.height) {
++		return false;
++	}
++
+ 	pixman_region32_t copy_region;
+ 	pixman_region32_init_rect(&copy_region, 0, 0,
+ 		buffer->width, buffer->height);
+@@ -660,9 +672,6 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 		return true;
+ 	}
+ 
+-	struct wlr_dmabuf_attributes source_dmabuf = {0};
+-	bool have_source_dmabuf = wlr_buffer_get_dmabuf(buffer, &source_dmabuf);
+-
+ #if WLR_HAS_VULKAN_RENDERER
+ 	if (renderer->dmabuf_gpu_copy &&
+ 			!renderer->dmabuf_gpu_copy_runtime_disabled &&
+@@ -694,19 +703,94 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 			gl_ready = android_gl_finish(renderer);
+ 		}
+ 		uint64_t gl_wait_ns = android_monotonic_nsec() - gl_wait_start;
++		if (!gl_ready) {
++			wlr_log(WLR_ERROR,
++				"Android staging could not synchronize previous GLES reads; "
++				"refusing unsafe staging-buffer write");
++			pixman_region32_fini(&copy_region);
++			return false;
++		}
+ 
+-		struct wlr_android_vk_copy_result gpu_result = {0};
++		struct wlr_android_vk_copy_result gpu_result = {
++			.release_sync_fd = -1,
++		};
++		bool attempted_native_fence = native_fence;
+ 		bool gpu_ok = gl_ready && wlr_android_vk_bridge_copy(
+ 			renderer->dmabuf_vk_bridge, buffer, &source_dmabuf,
+ 			staging->handle, staging->allocation_bytes, staging->stride,
+ 			staging->android_format, &staging->vk_destination,
+ 			acquire_sync_fd, native_fence, &copy_region, &gpu_result);
+ 
+-		if (!gpu_ok && native_fence) {
+-			// The native-fence path did not submit a usable copy. Finish the
+-			// previous GLES reads before the CPU staging fallback can write
+-			// the same Android gralloc allocation.
+-			android_gl_finish(renderer);
++		if (!gpu_ok && gpu_result.completion_unknown) {
++			renderer->dmabuf_gpu_copy_runtime_disabled = true;
++			if (renderer->dmabuf_stats) {
++				renderer->dmabuf_staging_stats.gpu_failures++;
++				renderer->dmabuf_staging_stats.gpu_runtime_disables++;
++			}
++			wlr_log(WLR_ERROR,
++				"Android Vulkan GPU-copy completion is unknown; "
++				"disabling GPU-copy and refusing unsafe CPU fallback");
++			pixman_region32_fini(&copy_region);
++			return false;
++		}
++
++		if (!gpu_ok && attempted_native_fence &&
++				gpu_result.native_sync_failed) {
++			if (renderer->dmabuf_stats) {
++				renderer->dmabuf_staging_stats
++					.gpu_native_fence_failures++;
++			}
++			android_disable_gpu_native_fence(renderer,
++				"native Vulkan synchronization failed");
++
++			uint64_t retry_gl_start = android_monotonic_nsec();
++			bool retry_gl_ready = android_gl_finish(renderer);
++			gl_wait_ns += android_monotonic_nsec() - retry_gl_start;
++
++			if (!retry_gl_ready) {
++				wlr_log(WLR_ERROR,
++					"Android Vulkan native-fence retry could not finish GLES reads; "
++					"refusing unsafe fallback");
++				pixman_region32_fini(&copy_region);
++				return false;
++			}
++
++			memset(&gpu_result, 0, sizeof(gpu_result));
++			gpu_result.release_sync_fd = -1;
++			gpu_ok = wlr_android_vk_bridge_copy(
++				renderer->dmabuf_vk_bridge, buffer, &source_dmabuf,
++				staging->handle, staging->allocation_bytes,
++				staging->stride, staging->android_format,
++				&staging->vk_destination, -1, false,
++				&copy_region, &gpu_result);
++		}
++
++		if (!gpu_ok && attempted_native_fence &&
++				!gpu_result.native_sync_failed &&
++				!gpu_result.completion_unknown) {
++			uint64_t fallback_gl_start = android_monotonic_nsec();
++			bool fallback_gl_ready = android_gl_finish(renderer);
++			gl_wait_ns += android_monotonic_nsec() - fallback_gl_start;
++			if (!fallback_gl_ready) {
++				wlr_log(WLR_ERROR,
++					"Android Vulkan GPU-copy failed before submission and GLES reads "
++					"could not be finished; refusing unsafe CPU fallback");
++				pixman_region32_fini(&copy_region);
++				return false;
++			}
++		}
++
++		if (!gpu_ok && gpu_result.completion_unknown) {
++			renderer->dmabuf_gpu_copy_runtime_disabled = true;
++			if (renderer->dmabuf_stats) {
++				renderer->dmabuf_staging_stats.gpu_failures++;
++				renderer->dmabuf_staging_stats.gpu_runtime_disables++;
++			}
++			wlr_log(WLR_ERROR,
++				"Android Vulkan blocking retry completion is unknown; "
++				"refusing unsafe CPU fallback");
++			pixman_region32_fini(&copy_region);
++			return false;
+ 		}
+ 
+ 		if (gpu_ok) {
+@@ -721,6 +805,18 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 					}
+ 					android_disable_gpu_native_fence(renderer,
+ 						"failed to queue Vulkan completion fence in GLES");
++					if (!wlr_android_vk_bridge_wait_idle(
++							renderer->dmabuf_vk_bridge)) {
++						renderer->dmabuf_gpu_copy_runtime_disabled = true;
++						if (renderer->dmabuf_stats) {
++							renderer->dmabuf_staging_stats
++								.gpu_runtime_disables++;
++						}
++						wlr_log(WLR_ERROR,
++							"Android Vulkan completion could not be recovered after EGL wait failure");
++						pixman_region32_fini(&copy_region);
++						return false;
++					}
+ 				}
+ 			} else if (gpu_result.native_fence_fallback) {
+ 				native_wait_ok = false;
+@@ -729,7 +825,7 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 						.gpu_native_fence_failures++;
+ 				}
+ 				android_disable_gpu_native_fence(renderer,
+-					"Vulkan SYNC_FD export fell back to a host wait");
++					"Vulkan native-fence path fell back to a host wait");
+ 			}
+ 
+ 			renderer->dmabuf_gpu_copy_consecutive_failures = 0;
+@@ -776,6 +872,18 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 	}
+ #endif
+ 
++#if WLR_HAS_VULKAN_RENDERER
++	if (staging->vk_destination != NULL &&
++			renderer->dmabuf_vk_bridge != NULL &&
++			!wlr_android_vk_bridge_wait_idle(renderer->dmabuf_vk_bridge)) {
++		wlr_log(WLR_ERROR,
++			"Android Vulkan destination completion is unknown; "
++			"refusing unsafe CPU staging fallback");
++		pixman_region32_fini(&copy_region);
++		return false;
++	}
++#endif
++
+ 	bool source_cpu_sync = false;
+ 	if (renderer->dmabuf_cpu_sync &&
+ 			have_source_dmabuf && source_dmabuf.n_planes == 1) {
+diff --git a/render/android/vulkan_bridge.c b/render/android/vulkan_bridge.c
+index b76c3c6..cfbf3b0 100644
+--- a/render/android/vulkan_bridge.c
++++ b/render/android/vulkan_bridge.c
+@@ -10,6 +10,7 @@
+ #include <unistd.h>
+ #include <drm_fourcc.h>
+ #include <vulkan/vulkan.h>
++#include <wayland-server-core.h>
+ #include <wlr/util/addon.h>
+ #include <wlr/util/log.h>
+ #include "render/android_vulkan_bridge.h"
+@@ -448,6 +449,49 @@ error:
+ }
+ 
+ 
++static bool recover_async_queue_idle(
++		struct wlr_android_vk_bridge *bridge,
++		struct wlr_android_vk_copy_result *result, const char *reason) {
++	bridge->sync_fd_supported = false;
++	VkResult res = vkQueueWaitIdle(bridge->device->queue);
++	if (res != VK_SUCCESS) {
++		wlr_log(WLR_ERROR, "%s: %s (%d)",
++			reason, vulkan_strerror(res), res);
++		result->completion_unknown = true;
++		return false;
++	}
++
++	for (size_t i = 0; i < ANDROID_VK_ASYNC_SLOTS; i++) {
++		bridge->async_slots[i].in_flight = false;
++	}
++	return true;
++}
++
++static bool wait_slot_completion(struct wlr_android_vk_bridge *bridge,
++		struct wlr_android_vk_async_slot *slot,
++		struct wlr_android_vk_copy_result *result, const char *reason) {
++	uint64_t wait_start = monotonic_nsec();
++	VkResult res = vkWaitForFences(bridge->device->dev,
++		1, &slot->fence, VK_TRUE, UINT64_MAX);
++	result->slot_wait_ns += monotonic_nsec() - wait_start;
++	if (res == VK_SUCCESS) {
++		res = vkResetFences(bridge->device->dev, 1, &slot->fence);
++		if (res != VK_SUCCESS) {
++			wlr_vk_error(
++				"Android Vulkan bridge: vkResetFences(completion recovery)",
++				res);
++			bridge->sync_fd_supported = false;
++		}
++		slot->in_flight = false;
++		return true;
++	}
++
++	wlr_log(WLR_ERROR, "%s: %s (%d)",
++		reason, vulkan_strerror(res), res);
++	return recover_async_queue_idle(bridge, result,
++		"Android Vulkan bridge: vkQueueWaitIdle(completion recovery)");
++}
++
+ static void destroy_async_slots(struct wlr_android_vk_bridge *bridge) {
+ 	if (bridge == NULL || bridge->device == NULL) {
+ 		return;
+@@ -555,6 +599,7 @@ static struct wlr_android_vk_async_slot *acquire_async_slot(
+ 				1, &slot->fence);
+ 			if (res != VK_SUCCESS) {
+ 				wlr_vk_error("Android Vulkan bridge: vkResetFences", res);
++				bridge->sync_fd_supported = false;
+ 				return NULL;
+ 			}
+ 			slot->in_flight = false;
+@@ -564,6 +609,8 @@ static struct wlr_android_vk_async_slot *acquire_async_slot(
+ 		}
+ 		if (status != VK_NOT_READY) {
+ 			wlr_vk_error("Android Vulkan bridge: vkGetFenceStatus", status);
++			recover_async_queue_idle(bridge, result,
++				"Android Vulkan bridge: vkQueueWaitIdle(fence-status recovery)");
+ 			return NULL;
+ 		}
+ 	}
+@@ -576,11 +623,14 @@ static struct wlr_android_vk_async_slot *acquire_async_slot(
+ 	result->slot_wait_ns += monotonic_nsec() - wait_start;
+ 	if (res != VK_SUCCESS) {
+ 		wlr_vk_error("Android Vulkan bridge: vkWaitForFences(async slot)", res);
++		recover_async_queue_idle(bridge, result,
++			"Android Vulkan bridge: vkQueueWaitIdle(async-slot recovery)");
+ 		return NULL;
+ 	}
+ 	res = vkResetFences(bridge->device->dev, 1, &slot->fence);
+ 	if (res != VK_SUCCESS) {
+ 		wlr_vk_error("Android Vulkan bridge: vkResetFences(async slot)", res);
++		bridge->sync_fd_supported = false;
+ 		return NULL;
+ 	}
+ 	slot->in_flight = false;
+@@ -851,6 +901,34 @@ bool wlr_android_vk_bridge_supports_native_fence(
+ 	return bridge != NULL && bridge->sync_fd_supported;
+ }
+ 
++bool wlr_android_vk_bridge_wait_idle(struct wlr_android_vk_bridge *bridge) {
++	if (bridge == NULL || bridge->device == NULL) {
++		return false;
++	}
++
++	VkResult res = vkQueueWaitIdle(bridge->device->queue);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkQueueWaitIdle(recovery)", res);
++		return false;
++	}
++
++	for (size_t i = 0; i < ANDROID_VK_ASYNC_SLOTS; i++) {
++		struct wlr_android_vk_async_slot *slot = &bridge->async_slots[i];
++		if (!slot->in_flight) {
++			continue;
++		}
++		res = vkResetFences(bridge->device->dev, 1, &slot->fence);
++		if (res != VK_SUCCESS) {
++			wlr_vk_error(
++				"Android Vulkan bridge: vkResetFences(queue-idle recovery)",
++				res);
++			bridge->sync_fd_supported = false;
++		}
++		slot->in_flight = false;
++	}
++	return true;
++}
++
+ void wlr_android_vk_bridge_release_destination(
+ 		struct wlr_android_vk_bridge *bridge, void **destination_data) {
+ 	if (bridge == NULL || destination_data == NULL || *destination_data == NULL) {
+@@ -890,6 +968,7 @@ bool wlr_android_vk_bridge_copy(struct wlr_android_vk_bridge *bridge,
+ 
+ 	if (native_fence_sync &&
+ 			(!bridge->sync_fd_supported || acquire_sync_fd < 0)) {
++		result->native_sync_failed = true;
+ 		if (acquire_sync_fd >= 0) {
+ 			close(acquire_sync_fd);
+ 		}
+@@ -1002,12 +1081,18 @@ bool wlr_android_vk_bridge_copy(struct wlr_android_vk_bridge *bridge,
+ 			&submit_info, VK_NULL_HANDLE);
+ 		if (res != VK_SUCCESS) {
+ 			wlr_vk_error("Android Vulkan bridge: vkQueueSubmit", res);
++			if (res == VK_ERROR_DEVICE_LOST) {
++				result->completion_unknown = true;
++			}
+ 			return false;
+ 		}
++		result->submitted = true;
++
+ 		res = vkQueueWaitIdle(bridge->device->queue);
+ 		result->gpu_ns = monotonic_nsec() - gpu_start;
+ 		if (res != VK_SUCCESS) {
+ 			wlr_vk_error("Android Vulkan bridge: vkQueueWaitIdle", res);
++			result->completion_unknown = true;
+ 			return false;
+ 		}
+ 		return true;
+@@ -1016,6 +1101,7 @@ bool wlr_android_vk_bridge_copy(struct wlr_android_vk_bridge *bridge,
+ 	struct wlr_android_vk_async_slot *slot =
+ 		acquire_async_slot(bridge, result);
+ 	if (slot == NULL) {
++		result->native_sync_failed = true;
+ 		free(regions);
+ 		close(acquire_sync_fd);
+ 		return false;
+@@ -1039,10 +1125,12 @@ bool wlr_android_vk_bridge_copy(struct wlr_android_vk_bridge *bridge,
+ 	VkResult res = bridge->device->api.vkImportSemaphoreFdKHR(
+ 		bridge->device->dev, &import_info);
+ 	if (res != VK_SUCCESS) {
++		result->native_sync_failed = true;
+ 		close(acquire_sync_fd);
+ 		wlr_vk_error("Android Vulkan bridge: vkImportSemaphoreFdKHR", res);
+ 		return false;
+ 	}
++	// Ownership transfers to Vulkan after a successful import.
+ 	acquire_sync_fd = -1;
+ 
+ 	VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+@@ -1060,10 +1148,16 @@ bool wlr_android_vk_bridge_copy(struct wlr_android_vk_bridge *bridge,
+ 	uint64_t gpu_start = monotonic_nsec();
+ 	res = vkQueueSubmit(bridge->device->queue, 1, &submit_info, slot->fence);
+ 	if (res != VK_SUCCESS) {
++		result->native_sync_failed = true;
++		bridge->sync_fd_supported = false;
++		if (res == VK_ERROR_DEVICE_LOST) {
++			result->completion_unknown = true;
++		}
+ 		wlr_vk_error("Android Vulkan bridge: vkQueueSubmit(native fence)", res);
+ 		return false;
+ 	}
+ 	slot->in_flight = true;
++	result->submitted = true;
+ 
+ 	VkSemaphoreGetFdInfoKHR get_fd_info = {
+ 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR,
+@@ -1074,26 +1168,14 @@ bool wlr_android_vk_bridge_copy(struct wlr_android_vk_bridge *bridge,
+ 		bridge->device->dev, &get_fd_info, &result->release_sync_fd);
+ 	result->gpu_ns = monotonic_nsec() - gpu_start;
+ 	if (res != VK_SUCCESS) {
++		result->native_sync_failed = true;
++		bridge->sync_fd_supported = false;
+ 		wlr_vk_error("Android Vulkan bridge: vkGetSemaphoreFdKHR", res);
+ 
+-		uint64_t wait_start = monotonic_nsec();
+-		VkResult wait_res = vkWaitForFences(bridge->device->dev,
+-			1, &slot->fence, VK_TRUE, UINT64_MAX);
+-		result->slot_wait_ns += monotonic_nsec() - wait_start;
+-		if (wait_res != VK_SUCCESS) {
+-			wlr_vk_error(
+-				"Android Vulkan bridge: vkWaitForFences(export fallback)",
+-				wait_res);
++		if (!wait_slot_completion(bridge, slot, result,
++				"Android Vulkan bridge: vkWaitForFences(export recovery)")) {
+ 			return false;
+ 		}
+-		wait_res = vkResetFences(bridge->device->dev, 1, &slot->fence);
+-		if (wait_res != VK_SUCCESS) {
+-			wlr_vk_error(
+-				"Android Vulkan bridge: vkResetFences(export fallback)",
+-				wait_res);
+-			return false;
+-		}
+-		slot->in_flight = false;
+ 		result->native_fence_fallback = true;
+ 		return true;
+ 	}

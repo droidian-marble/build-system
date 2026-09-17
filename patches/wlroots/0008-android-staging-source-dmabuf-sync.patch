@@ -1,0 +1,307 @@
+diff --git a/include/render/android.h b/include/render/android.h
+index 98569eb5..0297204d 100644
+--- a/include/render/android.h
++++ b/include/render/android.h
+@@ -21,6 +21,7 @@ struct wlr_android_renderer {
+ 	struct wlr_drm_format_set shm_formats;
+ 
+ 	bool dmabuf_staging;
++	bool dmabuf_cpu_sync;
+ 	bool dmabuf_staging_hwc;
+ 	bool dmabuf_staging_bgra;
+ 	bool dmabuf_staging_bgra_runtime_disabled;
+@@ -60,6 +61,7 @@ struct wlr_android_renderer {
+ 		uint64_t bgra_runtime_disables;
+ 		uint64_t eglimage_failures;
+ 		uint64_t gl_import_failures;
++		uint64_t source_sync_failures;
+ 		uint64_t generic_fallbacks;
+ 		uint64_t failures;
+ 	} dmabuf_staging_stats;
+diff --git a/include/render/dmabuf.h b/include/render/dmabuf.h
+index 3d905ce9..1e0ca040 100644
+--- a/include/render/dmabuf.h
++++ b/include/render/dmabuf.h
+@@ -32,4 +32,15 @@ bool dmabuf_import_sync_file(int dmabuf_fd, uint32_t flags, int sync_file_fd);
+  */
+ int dmabuf_export_sync_file(int dmabuf_fd, uint32_t flags);
+ 
++/**
++ * Wait for implicit DMA-BUF fences, then begin a CPU mmap access session.
++ * The access must be paired with dmabuf_cpu_end().
++ */
++bool dmabuf_cpu_begin(int dmabuf_fd, uint32_t flags);
++
++/**
++ * End a CPU mmap access session started by dmabuf_cpu_begin().
++ */
++bool dmabuf_cpu_end(int dmabuf_fd, uint32_t flags);
++
+ #endif
+diff --git a/render/android/renderer.c b/render/android/renderer.c
+index 59ac8d10..ebc03345 100644
+--- a/render/android/renderer.c
++++ b/render/android/renderer.c
+@@ -10,6 +10,7 @@
+ #endif
+ #include <android/hardware/gralloc.h>
+ #include "render/android.h"
++#include "render/dmabuf.h"
+ #include "render/egl.h"
+ #include "render/gles2.h"
+ #include "types/wlr_matrix.h"
+@@ -156,8 +157,8 @@ static void android_staging_stats_maybe_log(
+ 		" pool_evict=%" PRIu64 " pool_drop=%" PRIu64
+ 		" pool_cached=%.1fMiB bgra_fallback=%" PRIu64
+ 		" bgra_disabled=%" PRIu64 " eglimage_fail=%" PRIu64
+-		" gl_import_fail=%" PRIu64 " generic_fallback=%" PRIu64
+-		" failures=%" PRIu64,
++		" gl_import_fail=%" PRIu64 " src_sync_fail=%" PRIu64
++		" generic_fallback=%" PRIu64 " failures=%" PRIu64,
+ 		updates,
+ 		renderer->dmabuf_staging_stats.full_copies,
+ 		renderer->dmabuf_staging_stats.damage_updates,
+@@ -179,6 +180,7 @@ static void android_staging_stats_maybe_log(
+ 		renderer->dmabuf_staging_stats.bgra_runtime_disables,
+ 		renderer->dmabuf_staging_stats.eglimage_failures,
+ 		renderer->dmabuf_staging_stats.gl_import_failures,
++		renderer->dmabuf_staging_stats.source_sync_failures,
+ 		renderer->dmabuf_staging_stats.generic_fallbacks,
+ 		renderer->dmabuf_staging_stats.failures);
+ 
+@@ -393,25 +395,66 @@ static bool android_swizzle_bgra_to_rgba(uint8_t *dst, const uint8_t *src,
+ 	return used_neon;
+ }
+ 
++static void android_staging_disable_source_sync(
++		struct wlr_android_renderer *renderer, const char *phase) {
++	if (!renderer->dmabuf_cpu_sync) {
++		return;
++	}
++
++	renderer->dmabuf_cpu_sync = false;
++	if (renderer->dmabuf_stats) {
++		renderer->dmabuf_staging_stats.source_sync_failures++;
++	}
++	wlr_log(WLR_ERROR,
++		"Android staging source DMA-BUF CPU sync failed during %s; disabling CPU sync",
++		phase);
++}
++
+ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 		struct wlr_buffer *buffer, const pixman_region32_t *damage) {
+ 	struct wlr_android_renderer *renderer = staging->renderer;
++	bool ok = false;
++	pixman_region32_t copy_region;
++	pixman_region32_init_rect(&copy_region, 0, 0,
++		buffer->width, buffer->height);
++	if (damage != NULL) {
++		pixman_region32_intersect(&copy_region, &copy_region, damage);
++	}
++	if (!pixman_region32_not_empty(&copy_region)) {
++		if (renderer->dmabuf_stats) {
++			renderer->dmabuf_staging_stats.skipped_updates++;
++			android_staging_stats_maybe_log(renderer,
++				android_monotonic_nsec());
++		}
++		pixman_region32_fini(&copy_region);
++		return true;
++	}
++
++	struct wlr_dmabuf_attributes source_dmabuf = {0};
++	bool source_cpu_sync = false;
++	if (renderer->dmabuf_cpu_sync &&
++			wlr_buffer_get_dmabuf(buffer, &source_dmabuf) &&
++			source_dmabuf.n_planes == 1) {
++		if (dmabuf_cpu_begin(source_dmabuf.fd[0], DMA_BUF_SYNC_READ)) {
++			source_cpu_sync = true;
++		} else {
++			android_staging_disable_source_sync(renderer, "begin");
++		}
++	}
++
+ 	void *src_data = NULL;
+ 	uint32_t src_format = DRM_FORMAT_INVALID;
+ 	size_t src_stride = 0;
+-	if (!wlr_buffer_begin_data_ptr_access(buffer,
+-			WLR_BUFFER_DATA_PTR_ACCESS_READ, &src_data, &src_format,
+-			&src_stride)) {
++	bool data_ptr_access = wlr_buffer_begin_data_ptr_access(buffer,
++		WLR_BUFFER_DATA_PTR_ACCESS_READ, &src_data, &src_format,
++		&src_stride);
++	if (!data_ptr_access) {
+ 		if (renderer->dmabuf_stats) {
+ 			renderer->dmabuf_staging_stats.failures++;
+ 		}
+-		return false;
++		goto out_access;
+ 	}
+ 
+-	bool ok = false;
+-	bool region_initialized = false;
+-	pixman_region32_t copy_region;
+-
+ 	if ((src_format != DRM_FORMAT_ARGB8888 &&
+ 			src_format != DRM_FORMAT_XRGB8888) ||
+ 			staging->source_format != src_format ||
+@@ -419,23 +462,7 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 			buffer->height != staging->native_buffer.height ||
+ 			staging->stride < (uint32_t)buffer->width ||
+ 			src_stride < (size_t)buffer->width * 4) {
+-		goto out_src;
+-	}
+-
+-	pixman_region32_init_rect(&copy_region, 0, 0,
+-		buffer->width, buffer->height);
+-	region_initialized = true;
+-	if (damage != NULL) {
+-		pixman_region32_intersect(&copy_region, &copy_region, damage);
+-	}
+-	if (!pixman_region32_not_empty(&copy_region)) {
+-		if (renderer->dmabuf_stats) {
+-			renderer->dmabuf_staging_stats.skipped_updates++;
+-			android_staging_stats_maybe_log(renderer,
+-				android_monotonic_nsec());
+-		}
+-		ok = true;
+-		goto out_region;
++		goto out_access;
+ 	}
+ 
+ 	int rects_len = 0;
+@@ -508,7 +535,7 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 		if (renderer->dmabuf_stats) {
+ 			renderer->dmabuf_staging_stats.failures++;
+ 		}
+-		goto out_region;
++		goto out_access;
+ 	}
+ 
+ 	bool direct_copy = staging->android_format == HAL_PIXEL_FORMAT_BGRA_8888;
+@@ -563,7 +590,7 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 		if (renderer->dmabuf_stats) {
+ 			renderer->dmabuf_staging_stats.failures++;
+ 		}
+-		goto out_region;
++		goto out_access;
+ 	}
+ 
+ 	if (renderer->dmabuf_stats) {
+@@ -602,12 +629,15 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 
+ 	ok = true;
+ 
+-out_region:
+-	if (region_initialized) {
+-		pixman_region32_fini(&copy_region);
++out_access:
++	if (data_ptr_access) {
++		wlr_buffer_end_data_ptr_access(buffer);
++	}
++	if (source_cpu_sync &&
++			!dmabuf_cpu_end(source_dmabuf.fd[0], DMA_BUF_SYNC_READ)) {
++		android_staging_disable_source_sync(renderer, "end");
+ 	}
+-out_src:
+-	wlr_buffer_end_data_ptr_access(buffer);
++	pixman_region32_fini(&copy_region);
+ 	return ok;
+ }
+ 
+@@ -1199,6 +1229,8 @@ struct wlr_renderer *wlr_android_renderer_create(void) {
+ 
+ 	renderer->dmabuf_staging = android_env_enabled(
+ 		"WLR_ANDROID_DMABUF_STAGING", true);
++	renderer->dmabuf_cpu_sync = android_env_enabled(
++		"WLR_ANDROID_DMABUF_CPU_SYNC", true);
+ 	renderer->dmabuf_staging_hwc = android_env_enabled(
+ 		"WLR_ANDROID_DMABUF_STAGING_HWC", true);
+ 	renderer->dmabuf_staging_bgra = android_env_enabled(
+@@ -1241,8 +1273,9 @@ struct wlr_renderer *wlr_android_renderer_create(void) {
+ 	if (renderer->dmabuf_staging) {
+ 		wlr_log(WLR_INFO,
+ 			"Android linux-dmabuf gralloc staging enabled: "
+-			"bgra=%d hwc=%d neon=%d pool=%zu pool_mib=%zu "
++			"cpu_sync=%d bgra=%d hwc=%d neon=%d pool=%zu pool_mib=%zu "
+ 			"coalesce=%zu overdraw=%zu%% full_copy=%zu%% stats=%d",
++			renderer->dmabuf_cpu_sync,
+ 			renderer->dmabuf_staging_bgra,
+ 			renderer->dmabuf_staging_hwc,
+ 			renderer->dmabuf_staging_neon,
+diff --git a/render/dmabuf_linux.c b/render/dmabuf_linux.c
+index cf06229c..46757907 100644
+--- a/render/dmabuf_linux.c
++++ b/render/dmabuf_linux.c
+@@ -1,6 +1,9 @@
++#include <errno.h>
+ #include <linux/dma-buf.h>
+ #include <linux/version.h>
++#include <poll.h>
+ #include <stdlib.h>
++#include <sys/ioctl.h>
+ #include <sys/utsname.h>
+ #include <wlr/util/log.h>
+ #include <xf86drm.h>
+@@ -97,3 +100,62 @@ int dmabuf_export_sync_file(int dmabuf_fd, uint32_t flags) {
+ 	}
+ 	return data.fd;
+ }
++
++
++static bool dmabuf_wait_for_implicit_fences(int dmabuf_fd, uint32_t flags) {
++	short events = (flags & DMA_BUF_SYNC_WRITE) != 0 ? POLLOUT : POLLIN;
++	struct pollfd pfd = {
++		.fd = dmabuf_fd,
++		.events = events,
++	};
++
++	int ret;
++	do {
++		ret = poll(&pfd, 1, -1);
++	} while (ret < 0 && errno == EINTR);
++
++	if (ret < 0) {
++		wlr_log_errno(WLR_ERROR, "poll(DMA-BUF) failed");
++		return false;
++	}
++	if (ret == 0 || (pfd.revents & events) == 0 ||
++			(pfd.revents & (POLLERR | POLLNVAL)) != 0) {
++		wlr_log(WLR_ERROR,
++			"DMA-BUF poll returned unexpected events: 0x%x",
++			(unsigned int)pfd.revents);
++		return false;
++	}
++
++	return true;
++}
++
++static bool dmabuf_cpu_sync_ioctl(int dmabuf_fd, uint64_t flags) {
++	struct dma_buf_sync sync = {
++		.flags = flags,
++	};
++
++	int ret;
++	do {
++		ret = ioctl(dmabuf_fd, DMA_BUF_IOCTL_SYNC, &sync);
++	} while (ret < 0 && (errno == EINTR || errno == EAGAIN));
++
++	if (ret < 0) {
++		wlr_log_errno(WLR_ERROR, "DMA_BUF_IOCTL_SYNC failed");
++		return false;
++	}
++
++	return true;
++}
++
++bool dmabuf_cpu_begin(int dmabuf_fd, uint32_t flags) {
++	if (!dmabuf_wait_for_implicit_fences(dmabuf_fd, flags)) {
++		return false;
++	}
++	return dmabuf_cpu_sync_ioctl(dmabuf_fd,
++		(uint64_t)flags | DMA_BUF_SYNC_START);
++}
++
++bool dmabuf_cpu_end(int dmabuf_fd, uint32_t flags) {
++	return dmabuf_cpu_sync_ioctl(dmabuf_fd,
++		(uint64_t)flags | DMA_BUF_SYNC_END);
++}

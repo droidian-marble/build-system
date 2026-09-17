@@ -1,0 +1,1066 @@
+diff --git a/include/render/android.h b/include/render/android.h
+index 0297204d..05c99b1c 100644
+--- a/include/render/android.h
++++ b/include/render/android.h
+@@ -9,6 +9,7 @@
+ #include <wlr/util/addon.h>
+ 
+ struct wlr_output;
++struct wlr_android_vk_bridge;
+ 
+ struct wlr_android_renderer {
+ 	struct wlr_renderer *wlr_gles_renderer;
+@@ -22,6 +23,11 @@ struct wlr_android_renderer {
+ 
+ 	bool dmabuf_staging;
+ 	bool dmabuf_cpu_sync;
++	bool dmabuf_gpu_copy;
++	bool dmabuf_gpu_copy_runtime_disabled;
++	size_t dmabuf_gpu_copy_fail_limit;
++	size_t dmabuf_gpu_copy_consecutive_failures;
++	struct wlr_android_vk_bridge *dmabuf_vk_bridge;
+ 	bool dmabuf_staging_hwc;
+ 	bool dmabuf_staging_bgra;
+ 	bool dmabuf_staging_bgra_runtime_disabled;
+@@ -62,6 +68,13 @@ struct wlr_android_renderer {
+ 		uint64_t eglimage_failures;
+ 		uint64_t gl_import_failures;
+ 		uint64_t source_sync_failures;
++		uint64_t gpu_updates;
++		uint64_t gpu_failures;
++		uint64_t gpu_runtime_disables;
++		uint64_t gpu_copied_bytes;
++		uint64_t gpu_gl_wait_ns;
++		uint64_t gpu_source_wait_ns;
++		uint64_t gpu_submit_ns;
+ 		uint64_t generic_fallbacks;
+ 		uint64_t failures;
+ 	} dmabuf_staging_stats;
+diff --git a/include/render/android_vulkan_bridge.h b/include/render/android_vulkan_bridge.h
+new file mode 100644
+index 00000000..9f6e1669
+--- /dev/null
++++ b/include/render/android_vulkan_bridge.h
+@@ -0,0 +1,35 @@
++#ifndef RENDER_ANDROID_VULKAN_BRIDGE_H
++#define RENDER_ANDROID_VULKAN_BRIDGE_H
++
++#include <stddef.h>
++#include <stdint.h>
++#include <pixman.h>
++#include <android/hardware/gralloc.h>
++#include <wlr/types/wlr_buffer.h>
++
++struct wlr_android_vk_bridge;
++
++struct wlr_android_vk_copy_result {
++	uint64_t copied_bytes;
++	uint64_t source_wait_ns;
++	uint64_t gpu_ns;
++};
++
++struct wlr_android_vk_bridge *wlr_android_vk_bridge_create(void);
++void wlr_android_vk_bridge_destroy(struct wlr_android_vk_bridge *bridge);
++
++bool wlr_android_vk_bridge_copy(struct wlr_android_vk_bridge *bridge,
++	struct wlr_buffer *source_buffer,
++	const struct wlr_dmabuf_attributes *source_dmabuf,
++	buffer_handle_t destination_handle,
++	size_t destination_size,
++	uint32_t destination_stride,
++	int destination_format,
++	void **destination_data,
++	const pixman_region32_t *damage,
++	struct wlr_android_vk_copy_result *result);
++
++void wlr_android_vk_bridge_release_destination(
++	struct wlr_android_vk_bridge *bridge, void **destination_data);
++
++#endif
+diff --git a/render/android/meson.build b/render/android/meson.build
+index 2c123fcd..3d05c736 100644
+--- a/render/android/meson.build
++++ b/render/android/meson.build
+@@ -1,4 +1,7 @@
+ wlr_files += files(
+ 	'renderer.c',
+ )
++if features.get('vulkan-renderer')
++	wlr_files += files('vulkan_bridge.c')
++endif
+ features += { 'android-renderer': true }
+diff --git a/render/android/renderer.c b/render/android/renderer.c
+index ebc03345..4cc23e3d 100644
+--- a/render/android/renderer.c
++++ b/render/android/renderer.c
+@@ -9,7 +9,11 @@
+ #include <arm_neon.h>
+ #endif
+ #include <android/hardware/gralloc.h>
++#include <wlr/config.h>
+ #include "render/android.h"
++#if WLR_HAS_VULKAN_RENDERER
++#include "render/android_vulkan_bridge.h"
++#endif
+ #include "render/dmabuf.h"
+ #include "render/egl.h"
+ #include "render/gles2.h"
+@@ -64,6 +68,7 @@ struct wlr_android_staging_buffer {
+ 	int android_format;
+ 	int usage;
+ 	size_t allocation_bytes;
++	void *vk_destination;
+ 	int refs;
+ };
+ 
+@@ -145,6 +150,19 @@ static void android_staging_stats_maybe_log(
+ 	double pool_cached_mib =
+ 		(double)renderer->dmabuf_staging_pool_bytes /
+ 		(1024.0 * 1024.0);
++	uint64_t gpu_updates = renderer->dmabuf_staging_stats.gpu_updates;
++	double gpu_copy_mib_s = elapsed_s > 0.0 ?
++		(double)renderer->dmabuf_staging_stats.gpu_copied_bytes /
++		(1024.0 * 1024.0 * elapsed_s) : 0.0;
++	double gpu_gl_wait_ms = gpu_updates > 0 ?
++		(double)renderer->dmabuf_staging_stats.gpu_gl_wait_ns /
++		(double)gpu_updates / 1000000.0 : 0.0;
++	double gpu_source_wait_ms = gpu_updates > 0 ?
++		(double)renderer->dmabuf_staging_stats.gpu_source_wait_ns /
++		(double)gpu_updates / 1000000.0 : 0.0;
++	double gpu_submit_ms = gpu_updates > 0 ?
++		(double)renderer->dmabuf_staging_stats.gpu_submit_ns /
++		(double)gpu_updates / 1000000.0 : 0.0;
+ 
+ 	wlr_log(WLR_INFO,
+ 		"Android dmabuf staging stats: updates=%" PRIu64
+@@ -158,6 +176,9 @@ static void android_staging_stats_maybe_log(
+ 		" pool_cached=%.1fMiB bgra_fallback=%" PRIu64
+ 		" bgra_disabled=%" PRIu64 " eglimage_fail=%" PRIu64
+ 		" gl_import_fail=%" PRIu64 " src_sync_fail=%" PRIu64
++		" gpu=%" PRIu64 " gpu_fail=%" PRIu64 " gpu_disabled=%" PRIu64
++		" gpu_copy=%.1fMiB/s gpu_gl_wait=%.3fms"
++		" gpu_src_wait=%.3fms gpu_submit=%.3fms"
+ 		" generic_fallback=%" PRIu64 " failures=%" PRIu64,
+ 		updates,
+ 		renderer->dmabuf_staging_stats.full_copies,
+@@ -181,6 +202,10 @@ static void android_staging_stats_maybe_log(
+ 		renderer->dmabuf_staging_stats.eglimage_failures,
+ 		renderer->dmabuf_staging_stats.gl_import_failures,
+ 		renderer->dmabuf_staging_stats.source_sync_failures,
++		renderer->dmabuf_staging_stats.gpu_updates,
++		renderer->dmabuf_staging_stats.gpu_failures,
++		renderer->dmabuf_staging_stats.gpu_runtime_disables,
++		gpu_copy_mib_s, gpu_gl_wait_ms, gpu_source_wait_ms, gpu_submit_ms,
+ 		renderer->dmabuf_staging_stats.generic_fallbacks,
+ 		renderer->dmabuf_staging_stats.failures);
+ 
+@@ -206,6 +231,14 @@ static void android_staging_release_buffer(
+ 	if (staging == NULL) {
+ 		return;
+ 	}
++#if WLR_HAS_VULKAN_RENDERER
++	if (staging->vk_destination != NULL && staging->renderer != NULL &&
++			staging->renderer->dmabuf_vk_bridge != NULL) {
++		wlr_android_vk_bridge_release_destination(
++			staging->renderer->dmabuf_vk_bridge,
++			&staging->vk_destination);
++	}
++#endif
+ 	if (staging->handle != NULL) {
+ 		hybris_gralloc_release(staging->handle, 1);
+ 	}
+@@ -431,10 +464,69 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 	}
+ 
+ 	struct wlr_dmabuf_attributes source_dmabuf = {0};
++	bool have_source_dmabuf = wlr_buffer_get_dmabuf(buffer, &source_dmabuf);
++
++#if WLR_HAS_VULKAN_RENDERER
++	if (renderer->dmabuf_gpu_copy &&
++			!renderer->dmabuf_gpu_copy_runtime_disabled &&
++			renderer->dmabuf_vk_bridge != NULL &&
++			staging->android_format == HAL_PIXEL_FORMAT_BGRA_8888 &&
++			have_source_dmabuf && source_dmabuf.n_planes == 1) {
++		uint64_t gl_wait_start = android_monotonic_nsec();
++		struct wlr_egl_context prev_ctx;
++		wlr_egl_save_context(&prev_ctx);
++		bool gl_ready = wlr_egl_make_current(renderer->egl);
++		if (gl_ready) {
++			glFinish();
++		}
++		wlr_egl_restore_context(&prev_ctx);
++		uint64_t gl_wait_ns = android_monotonic_nsec() - gl_wait_start;
++
++		struct wlr_android_vk_copy_result gpu_result = {0};
++		bool gpu_ok = gl_ready && wlr_android_vk_bridge_copy(
++			renderer->dmabuf_vk_bridge, buffer, &source_dmabuf,
++			staging->handle, staging->allocation_bytes, staging->stride,
++			staging->android_format, &staging->vk_destination, &copy_region,
++			&gpu_result);
++		if (gpu_ok) {
++			renderer->dmabuf_gpu_copy_consecutive_failures = 0;
++			if (renderer->dmabuf_stats) {
++				renderer->dmabuf_staging_stats.gpu_updates++;
++				renderer->dmabuf_staging_stats.gpu_copied_bytes +=
++					gpu_result.copied_bytes;
++				renderer->dmabuf_staging_stats.gpu_gl_wait_ns += gl_wait_ns;
++				renderer->dmabuf_staging_stats.gpu_source_wait_ns +=
++					gpu_result.source_wait_ns;
++				renderer->dmabuf_staging_stats.gpu_submit_ns +=
++					gpu_result.gpu_ns;
++				android_staging_stats_maybe_log(renderer,
++					android_monotonic_nsec());
++			}
++			pixman_region32_fini(&copy_region);
++			return true;
++		}
++
++		renderer->dmabuf_gpu_copy_consecutive_failures++;
++		if (renderer->dmabuf_stats) {
++			renderer->dmabuf_staging_stats.gpu_failures++;
++		}
++		if (renderer->dmabuf_gpu_copy_fail_limit > 0 &&
++				renderer->dmabuf_gpu_copy_consecutive_failures >=
++				renderer->dmabuf_gpu_copy_fail_limit) {
++			renderer->dmabuf_gpu_copy_runtime_disabled = true;
++			if (renderer->dmabuf_stats) {
++				renderer->dmabuf_staging_stats.gpu_runtime_disables++;
++			}
++			wlr_log(WLR_ERROR,
++				"Android Vulkan GPU-copy bridge failed %zu consecutive times; disabling it",
++				renderer->dmabuf_gpu_copy_consecutive_failures);
++		}
++	}
++#endif
++
+ 	bool source_cpu_sync = false;
+ 	if (renderer->dmabuf_cpu_sync &&
+-			wlr_buffer_get_dmabuf(buffer, &source_dmabuf) &&
+-			source_dmabuf.n_planes == 1) {
++			have_source_dmabuf && source_dmabuf.n_planes == 1) {
+ 		if (dmabuf_cpu_begin(source_dmabuf.fd[0], DMA_BUF_SYNC_READ)) {
+ 			source_cpu_sync = true;
+ 		} else {
+@@ -981,6 +1073,10 @@ static void android_destroy(struct wlr_renderer *wlr_renderer) {
+ 
+ 	renderer->wlr_gles_renderer->impl->destroy(renderer->wlr_gles_renderer);
+ 	android_staging_pool_finish(renderer);
++#if WLR_HAS_VULKAN_RENDERER
++	wlr_android_vk_bridge_destroy(renderer->dmabuf_vk_bridge);
++	renderer->dmabuf_vk_bridge = NULL;
++#endif
+ }
+ 
+ static bool android_bind_buffer_for_output(struct wlr_renderer *wlr_renderer,
+@@ -1231,6 +1327,10 @@ struct wlr_renderer *wlr_android_renderer_create(void) {
+ 		"WLR_ANDROID_DMABUF_STAGING", true);
+ 	renderer->dmabuf_cpu_sync = android_env_enabled(
+ 		"WLR_ANDROID_DMABUF_CPU_SYNC", true);
++	renderer->dmabuf_gpu_copy = android_env_enabled(
++		"WLR_ANDROID_DMABUF_GPU_COPY", true);
++	renderer->dmabuf_gpu_copy_fail_limit = android_env_size(
++		"WLR_ANDROID_DMABUF_GPU_COPY_FAIL_LIMIT", 3, 64);
+ 	renderer->dmabuf_staging_hwc = android_env_enabled(
+ 		"WLR_ANDROID_DMABUF_STAGING_HWC", true);
+ 	renderer->dmabuf_staging_bgra = android_env_enabled(
+@@ -1270,12 +1370,30 @@ struct wlr_renderer *wlr_android_renderer_create(void) {
+ 		renderer->dmabuf_staging = false;
+ 	}
+ 
++#if WLR_HAS_VULKAN_RENDERER
++	if (renderer->dmabuf_staging && renderer->dmabuf_gpu_copy) {
++		renderer->dmabuf_vk_bridge = wlr_android_vk_bridge_create();
++		if (renderer->dmabuf_vk_bridge == NULL) {
++			wlr_log(WLR_ERROR,
++				"Android Vulkan GPU-copy bridge initialization failed; using CPU staging");
++			renderer->dmabuf_gpu_copy = false;
++		}
++	}
++#else
++	if (renderer->dmabuf_gpu_copy) {
++		wlr_log(WLR_ERROR,
++			"Android Vulkan GPU-copy requested but wlroots was built without Vulkan renderer support");
++		renderer->dmabuf_gpu_copy = false;
++	}
++#endif
++
+ 	if (renderer->dmabuf_staging) {
+ 		wlr_log(WLR_INFO,
+ 			"Android linux-dmabuf gralloc staging enabled: "
+-			"cpu_sync=%d bgra=%d hwc=%d neon=%d pool=%zu pool_mib=%zu "
++			"cpu_sync=%d gpu_copy=%d bgra=%d hwc=%d neon=%d pool=%zu pool_mib=%zu "
+ 			"coalesce=%zu overdraw=%zu%% full_copy=%zu%% stats=%d",
+ 			renderer->dmabuf_cpu_sync,
++			renderer->dmabuf_gpu_copy,
+ 			renderer->dmabuf_staging_bgra,
+ 			renderer->dmabuf_staging_hwc,
+ 			renderer->dmabuf_staging_neon,
+diff --git a/render/android/vulkan_bridge.c b/render/android/vulkan_bridge.c
+new file mode 100644
+index 00000000..897d3a26
+--- /dev/null
++++ b/render/android/vulkan_bridge.c
+@@ -0,0 +1,763 @@
++#define _POSIX_C_SOURCE 200809L
++#include <errno.h>
++#include <inttypes.h>
++#include <fcntl.h>
++#include <poll.h>
++#include <sys/stat.h>
++#include <stdlib.h>
++#include <string.h>
++#include <time.h>
++#include <unistd.h>
++#include <drm_fourcc.h>
++#include <vulkan/vulkan.h>
++#include <wlr/util/addon.h>
++#include <wlr/util/log.h>
++#include "render/android_vulkan_bridge.h"
++#include "render/vulkan.h"
++
++struct wlr_android_vk_source {
++	struct wlr_android_vk_bridge *bridge;
++	struct wlr_addon addon;
++	struct wl_list link;
++	VkImage image;
++	VkDeviceMemory memory;
++};
++
++struct wlr_android_vk_destination {
++	VkBuffer buffer;
++	VkDeviceMemory memory;
++};
++
++struct wlr_android_qcom_handle_info {
++	int data_fd;
++	size_t allocation_size;
++};
++
++#define QCOM_GRALLOC_MAGIC 0x676d736dU /* 'gmsm' */
++#define QCOM_PRIV_FLAGS_TILE_RENDERED 0x02000000U
++#define QCOM_PRIV_FLAGS_UBWC_ALIGNED 0x08000000U
++
++static bool get_qcom_handle_info(buffer_handle_t handle, int width, int height,
++		uint32_t stride, int android_format, size_t minimum_size,
++		struct wlr_android_qcom_handle_info *info) {
++	const native_handle_t *native = (const native_handle_t *)handle;
++	if (native == NULL || native->numFds != 2 || native->numInts < 15) {
++		return false;
++	}
++
++	const int *ints = &native->data[native->numFds];
++	uint32_t magic = (uint32_t)ints[0];
++	uint32_t flags = (uint32_t)ints[1];
++	int aligned_width = ints[2];
++	int aligned_height = ints[3];
++	int unaligned_width = ints[4];
++	int unaligned_height = ints[5];
++	int format = ints[6];
++	uint32_t size = (uint32_t)ints[13];
++	uint32_t offset = (uint32_t)ints[14];
++
++	if (magic != QCOM_GRALLOC_MAGIC ||
++			(flags & (QCOM_PRIV_FLAGS_TILE_RENDERED |
++			QCOM_PRIV_FLAGS_UBWC_ALIGNED)) != 0 ||
++			unaligned_width != width || unaligned_height != height ||
++			aligned_width != (int)stride || aligned_height < height ||
++			format != android_format || offset != 0 ||
++			(size_t)size < minimum_size) {
++		return false;
++	}
++
++	struct stat st;
++	if (fstat(native->data[0], &st) != 0 || st.st_size <= 0 ||
++			(uint64_t)st.st_size < (uint64_t)size) {
++		return false;
++	}
++
++	info->data_fd = native->data[0];
++	info->allocation_size = (size_t)size;
++	return true;
++}
++
++struct wlr_android_vk_bridge {
++	struct wlr_vk_instance *instance;
++	struct wlr_vk_device *device;
++	struct wlr_vk_renderer importer;
++	VkCommandPool command_pool;
++	VkCommandBuffer command_buffer;
++	struct wl_list sources;
++};
++
++static uint64_t monotonic_nsec(void) {
++	struct timespec ts;
++	clock_gettime(CLOCK_MONOTONIC, &ts);
++	return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
++}
++
++static void destroy_source(struct wlr_android_vk_source *source) {
++	if (source == NULL) {
++		return;
++	}
++	struct wlr_android_vk_bridge *bridge = source->bridge;
++	wlr_addon_finish(&source->addon);
++	wl_list_remove(&source->link);
++	if (source->image != VK_NULL_HANDLE) {
++		vkDestroyImage(bridge->device->dev, source->image, NULL);
++	}
++	if (source->memory != VK_NULL_HANDLE) {
++		vkFreeMemory(bridge->device->dev, source->memory, NULL);
++	}
++	free(source);
++}
++
++static void source_handle_destroy(struct wlr_addon *addon) {
++	struct wlr_android_vk_source *source =
++		wl_container_of(addon, source, addon);
++	destroy_source(source);
++}
++
++static const struct wlr_addon_interface source_addon_impl = {
++	.name = "wlr_android_vk_source",
++	.destroy = source_handle_destroy,
++};
++
++static bool wait_source_dmabuf(int fd, uint64_t *wait_ns) {
++	uint64_t start = monotonic_nsec();
++	struct pollfd pfd = {
++		.fd = fd,
++		.events = POLLIN,
++	};
++
++	int ret;
++	do {
++		ret = poll(&pfd, 1, 1000);
++	} while (ret < 0 && errno == EINTR);
++
++	*wait_ns = monotonic_nsec() - start;
++	if (ret < 0) {
++		wlr_log_errno(WLR_ERROR, "Android Vulkan bridge: poll(DMA-BUF) failed");
++		return false;
++	}
++	if (ret == 0) {
++		wlr_log(WLR_ERROR, "Android Vulkan bridge: timed out waiting for source DMA-BUF");
++		return false;
++	}
++	if ((pfd.revents & POLLIN) == 0 ||
++			(pfd.revents & (POLLERR | POLLNVAL)) != 0) {
++		wlr_log(WLR_ERROR,
++			"Android Vulkan bridge: unexpected DMA-BUF poll events 0x%x",
++			(unsigned)pfd.revents);
++		return false;
++	}
++	return true;
++}
++
++static struct wlr_android_vk_source *import_source(
++		struct wlr_android_vk_bridge *bridge, struct wlr_buffer *buffer,
++		const struct wlr_dmabuf_attributes *dmabuf) {
++	if (dmabuf->n_planes != 1 ||
++			(dmabuf->format != DRM_FORMAT_XRGB8888 &&
++			dmabuf->format != DRM_FORMAT_ARGB8888)) {
++		return NULL;
++	}
++
++	uint64_t modifier = dmabuf->modifier;
++	if (modifier == DRM_FORMAT_MOD_INVALID) {
++		modifier = DRM_FORMAT_MOD_LINEAR;
++	}
++	if (modifier != DRM_FORMAT_MOD_LINEAR) {
++		return NULL;
++	}
++
++	const struct wlr_vk_format *format =
++		vulkan_get_format_from_drm(dmabuf->format);
++	if (format == NULL) {
++		return NULL;
++	}
++
++	struct wlr_android_vk_source *source = calloc(1, sizeof(*source));
++	if (source == NULL) {
++		return NULL;
++	}
++	source->bridge = bridge;
++
++	VkExternalMemoryImageCreateInfo external_info = {
++		.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
++		.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
++	};
++	VkSubresourceLayout plane_layout = {
++		.offset = dmabuf->offset[0],
++		.rowPitch = dmabuf->stride[0],
++	};
++	VkImageDrmFormatModifierExplicitCreateInfoEXT modifier_info = {
++		.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT,
++		.drmFormatModifier = modifier,
++		.drmFormatModifierPlaneCount = 1,
++		.pPlaneLayouts = &plane_layout,
++	};
++	external_info.pNext = &modifier_info;
++
++	VkImageCreateInfo image_info = {
++		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
++		.pNext = &external_info,
++		.imageType = VK_IMAGE_TYPE_2D,
++		.format = format->vk,
++		.extent = {
++			.width = dmabuf->width,
++			.height = dmabuf->height,
++			.depth = 1,
++		},
++		.mipLevels = 1,
++		.arrayLayers = 1,
++		.samples = VK_SAMPLE_COUNT_1_BIT,
++		.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT,
++		.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
++		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
++		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
++	};
++
++	VkResult res = vkCreateImage(bridge->device->dev, &image_info, NULL,
++		&source->image);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkCreateImage(source)", res);
++		free(source);
++		return NULL;
++	}
++
++	VkMemoryFdPropertiesKHR fd_props = {
++		.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR,
++	};
++	res = bridge->device->api.vkGetMemoryFdPropertiesKHR(
++		bridge->device->dev, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
++		dmabuf->fd[0], &fd_props);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkGetMemoryFdPropertiesKHR(source)", res);
++		goto error;
++	}
++
++	VkMemoryRequirements requirements;
++	vkGetImageMemoryRequirements(bridge->device->dev, source->image,
++		&requirements);
++	int memory_type = vulkan_find_mem_type(bridge->device, 0,
++		requirements.memoryTypeBits & fd_props.memoryTypeBits);
++	if (memory_type < 0) {
++		wlr_log(WLR_ERROR,
++			"Android Vulkan bridge: no source DMA-BUF memory type");
++		goto error;
++	}
++
++	int fd = fcntl(dmabuf->fd[0], F_DUPFD_CLOEXEC, 0);
++	if (fd < 0) {
++		wlr_log_errno(WLR_ERROR,
++			"Android Vulkan bridge: failed to duplicate source DMA-BUF");
++		goto error;
++	}
++
++	VkMemoryDedicatedAllocateInfo dedicated_info = {
++		.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
++		.image = source->image,
++	};
++	VkImportMemoryFdInfoKHR import_info = {
++		.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
++		.pNext = &dedicated_info,
++		.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
++		.fd = fd,
++	};
++	VkMemoryAllocateInfo memory_info = {
++		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
++		.pNext = &import_info,
++		.allocationSize = requirements.size,
++		.memoryTypeIndex = (uint32_t)memory_type,
++	};
++
++	res = vkAllocateMemory(bridge->device->dev, &memory_info, NULL,
++		&source->memory);
++	if (res != VK_SUCCESS) {
++		close(fd);
++		wlr_vk_error("Android Vulkan bridge: vkAllocateMemory(source)", res);
++		goto error;
++	}
++
++	res = vkBindImageMemory(bridge->device->dev, source->image,
++		source->memory, 0);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkBindImageMemory(source)", res);
++		goto error;
++	}
++
++	wlr_addon_init(&source->addon, &buffer->addons, bridge,
++		&source_addon_impl);
++	wl_list_insert(&bridge->sources, &source->link);
++	return source;
++
++error:
++	if (source->memory != VK_NULL_HANDLE) {
++		vkFreeMemory(bridge->device->dev, source->memory, NULL);
++	}
++	if (source->image != VK_NULL_HANDLE) {
++		vkDestroyImage(bridge->device->dev, source->image, NULL);
++	}
++	free(source);
++	return NULL;
++}
++
++static struct wlr_android_vk_source *get_source(
++		struct wlr_android_vk_bridge *bridge, struct wlr_buffer *buffer,
++		const struct wlr_dmabuf_attributes *dmabuf) {
++	struct wlr_addon *addon = wlr_addon_find(&buffer->addons, bridge,
++		&source_addon_impl);
++	if (addon != NULL) {
++		struct wlr_android_vk_source *source =
++			wl_container_of(addon, source, addon);
++		return source;
++	}
++	return import_source(bridge, buffer, dmabuf);
++}
++
++static struct wlr_android_vk_destination *import_destination(
++		struct wlr_android_vk_bridge *bridge, buffer_handle_t handle,
++		int width, int height, uint32_t stride, int android_format,
++		size_t minimum_size) {
++	struct wlr_android_qcom_handle_info handle_info;
++	if (!get_qcom_handle_info(handle, width, height, stride, android_format,
++			minimum_size, &handle_info)) {
++		wlr_log(WLR_DEBUG,
++			"Android Vulkan bridge: destination is not a supported linear Qualcomm gralloc handle");
++		return NULL;
++	}
++
++	struct wlr_android_vk_destination *destination =
++		calloc(1, sizeof(*destination));
++	if (destination == NULL) {
++		return NULL;
++	}
++
++	VkExternalMemoryBufferCreateInfo external_info = {
++		.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO,
++		.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
++	};
++	VkBufferCreateInfo buffer_info = {
++		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
++		.pNext = &external_info,
++		.size = minimum_size,
++		.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
++		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
++	};
++	VkResult res = vkCreateBuffer(bridge->device->dev, &buffer_info, NULL,
++		&destination->buffer);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkCreateBuffer(destination)", res);
++		free(destination);
++		return NULL;
++	}
++
++	VkMemoryFdPropertiesKHR fd_props = {
++		.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR,
++	};
++	res = bridge->device->api.vkGetMemoryFdPropertiesKHR(
++		bridge->device->dev, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
++		handle_info.data_fd, &fd_props);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkGetMemoryFdPropertiesKHR(destination)", res);
++		goto error;
++	}
++
++	VkMemoryRequirements requirements;
++	vkGetBufferMemoryRequirements(bridge->device->dev, destination->buffer,
++		&requirements);
++	if (requirements.size > handle_info.allocation_size) {
++		wlr_log(WLR_DEBUG,
++			"Android Vulkan bridge: gralloc payload too small for Vulkan buffer (%" PRIu64 " > %zu)",
++			(uint64_t)requirements.size, handle_info.allocation_size);
++		goto error;
++	}
++	int memory_type = vulkan_find_mem_type(bridge->device, 0,
++		requirements.memoryTypeBits & fd_props.memoryTypeBits);
++	if (memory_type < 0) {
++		wlr_log(WLR_DEBUG,
++			"Android Vulkan bridge: no destination DMA-BUF memory type");
++		goto error;
++	}
++
++	int fd = fcntl(handle_info.data_fd, F_DUPFD_CLOEXEC, 0);
++	if (fd < 0) {
++		wlr_log_errno(WLR_ERROR,
++			"Android Vulkan bridge: failed to duplicate destination DMA-BUF");
++		goto error;
++	}
++
++	VkMemoryDedicatedAllocateInfo dedicated_info = {
++		.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
++		.buffer = destination->buffer,
++	};
++	VkImportMemoryFdInfoKHR import_info = {
++		.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
++		.pNext = &dedicated_info,
++		.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
++		.fd = fd,
++	};
++	VkMemoryAllocateInfo memory_info = {
++		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
++		.pNext = &import_info,
++		.allocationSize = requirements.size,
++		.memoryTypeIndex = (uint32_t)memory_type,
++	};
++	res = vkAllocateMemory(bridge->device->dev, &memory_info, NULL,
++		&destination->memory);
++	if (res != VK_SUCCESS) {
++		close(fd);
++		wlr_vk_error("Android Vulkan bridge: vkAllocateMemory(destination)", res);
++		goto error;
++	}
++
++	res = vkBindBufferMemory(bridge->device->dev, destination->buffer,
++		destination->memory, 0);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkBindBufferMemory(destination)", res);
++		goto error;
++	}
++	return destination;
++
++error:
++	if (destination->memory != VK_NULL_HANDLE) {
++		vkFreeMemory(bridge->device->dev, destination->memory, NULL);
++	}
++	if (destination->buffer != VK_NULL_HANDLE) {
++		vkDestroyBuffer(bridge->device->dev, destination->buffer, NULL);
++	}
++	free(destination);
++	return NULL;
++}
++
++struct wlr_android_vk_bridge *wlr_android_vk_bridge_create(void) {
++	struct wlr_vk_instance *instance = vulkan_instance_create(false);
++	if (instance == NULL) {
++		return NULL;
++	}
++
++	uint32_t physical_count = 0;
++	VkResult res = vkEnumeratePhysicalDevices(instance->instance,
++		&physical_count, NULL);
++	if (res != VK_SUCCESS || physical_count == 0) {
++		wlr_vk_error("Android Vulkan bridge: vkEnumeratePhysicalDevices", res);
++		vulkan_instance_destroy(instance);
++		return NULL;
++	}
++
++	VkPhysicalDevice *physical_devices = calloc(physical_count,
++		sizeof(*physical_devices));
++	if (physical_devices == NULL) {
++		vulkan_instance_destroy(instance);
++		return NULL;
++	}
++	res = vkEnumeratePhysicalDevices(instance->instance, &physical_count,
++		physical_devices);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkEnumeratePhysicalDevices", res);
++		free(physical_devices);
++		vulkan_instance_destroy(instance);
++		return NULL;
++	}
++
++	const char *filter = getenv("WLR_ANDROID_DMABUF_GPU_DEVICE");
++	struct wlr_vk_device *device = NULL;
++	VkPhysicalDevice chosen = VK_NULL_HANDLE;
++	VkPhysicalDeviceProperties chosen_props = {0};
++	for (uint32_t i = 0; i < physical_count; i++) {
++		VkPhysicalDeviceProperties props;
++		vkGetPhysicalDeviceProperties(physical_devices[i], &props);
++		if (filter != NULL && *filter != '\0' &&
++				strstr(props.deviceName, filter) == NULL) {
++			continue;
++		}
++
++		struct wlr_vk_device *candidate =
++			vulkan_device_create(instance, physical_devices[i]);
++		if (candidate == NULL) {
++			continue;
++		}
++
++		VkPhysicalDeviceExternalBufferInfo external_info = {
++			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO,
++			.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
++			.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
++		};
++		VkExternalBufferProperties external_props = {
++			.sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES,
++		};
++		vkGetPhysicalDeviceExternalBufferProperties(physical_devices[i],
++			&external_info, &external_props);
++		if ((external_props.externalMemoryProperties.externalMemoryFeatures &
++				VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) == 0) {
++			vulkan_device_destroy(candidate);
++			continue;
++		}
++
++		device = candidate;
++		chosen = physical_devices[i];
++		chosen_props = props;
++		break;
++	}
++	free(physical_devices);
++
++	if (device == NULL || chosen == VK_NULL_HANDLE) {
++		wlr_log(WLR_ERROR,
++			"Android Vulkan bridge: no suitable Vulkan DMA-BUF device found");
++		vulkan_instance_destroy(instance);
++		return NULL;
++	}
++
++	struct wlr_android_vk_bridge *bridge = calloc(1, sizeof(*bridge));
++	if (bridge == NULL) {
++		vulkan_device_destroy(device);
++		vulkan_instance_destroy(instance);
++		return NULL;
++	}
++	bridge->instance = instance;
++	bridge->device = device;
++	bridge->importer.dev = device;
++	wl_list_init(&bridge->sources);
++
++	VkCommandPoolCreateInfo pool_info = {
++		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
++		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
++		.queueFamilyIndex = device->queue_family,
++	};
++	res = vkCreateCommandPool(device->dev, &pool_info, NULL,
++		&bridge->command_pool);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkCreateCommandPool", res);
++		wlr_android_vk_bridge_destroy(bridge);
++		return NULL;
++	}
++
++	VkCommandBufferAllocateInfo command_info = {
++		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
++		.commandPool = bridge->command_pool,
++		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
++		.commandBufferCount = 1,
++	};
++	res = vkAllocateCommandBuffers(device->dev, &command_info,
++		&bridge->command_buffer);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkAllocateCommandBuffers", res);
++		wlr_android_vk_bridge_destroy(bridge);
++		return NULL;
++	}
++
++	wlr_log(WLR_INFO, "Android Vulkan GPU-copy bridge using %s",
++		chosen_props.deviceName);
++	return bridge;
++}
++
++void wlr_android_vk_bridge_destroy(struct wlr_android_vk_bridge *bridge) {
++	if (bridge == NULL) {
++		return;
++	}
++	if (bridge->device != NULL && bridge->device->dev != VK_NULL_HANDLE) {
++		vkDeviceWaitIdle(bridge->device->dev);
++	}
++
++	struct wlr_android_vk_source *source, *tmp;
++	wl_list_for_each_safe(source, tmp, &bridge->sources, link) {
++		destroy_source(source);
++	}
++	if (bridge->command_pool != VK_NULL_HANDLE && bridge->device != NULL) {
++		vkDestroyCommandPool(bridge->device->dev, bridge->command_pool, NULL);
++	}
++	if (bridge->device != NULL) {
++		vulkan_device_destroy(bridge->device);
++	}
++	if (bridge->instance != NULL) {
++		vulkan_instance_destroy(bridge->instance);
++	}
++	free(bridge);
++}
++
++void wlr_android_vk_bridge_release_destination(
++		struct wlr_android_vk_bridge *bridge, void **destination_data) {
++	if (bridge == NULL || destination_data == NULL || *destination_data == NULL) {
++		return;
++	}
++	struct wlr_android_vk_destination *destination = *destination_data;
++	vkDestroyBuffer(bridge->device->dev, destination->buffer, NULL);
++	vkFreeMemory(bridge->device->dev, destination->memory, NULL);
++	free(destination);
++	*destination_data = NULL;
++}
++
++bool wlr_android_vk_bridge_copy(struct wlr_android_vk_bridge *bridge,
++		struct wlr_buffer *source_buffer,
++		const struct wlr_dmabuf_attributes *source_dmabuf,
++		buffer_handle_t destination_handle, size_t destination_size,
++		uint32_t destination_stride, int destination_format,
++		void **destination_data,
++		const pixman_region32_t *damage,
++		struct wlr_android_vk_copy_result *result) {
++	memset(result, 0, sizeof(*result));
++	if (bridge == NULL || source_buffer == NULL || source_dmabuf == NULL ||
++			destination_handle == NULL || destination_data == NULL ||
++			damage == NULL || source_dmabuf->n_planes != 1) {
++		return false;
++	}
++
++	struct wlr_android_vk_source *source =
++		get_source(bridge, source_buffer, source_dmabuf);
++	if (source == NULL) {
++		return false;
++	}
++
++	struct wlr_android_vk_destination *destination = *destination_data;
++	if (destination == NULL) {
++		destination = import_destination(bridge, destination_handle,
++			source_dmabuf->width, source_dmabuf->height, destination_stride,
++			destination_format, destination_size);
++		if (destination == NULL) {
++			return false;
++		}
++		*destination_data = destination;
++	}
++
++	int rect_count = 0;
++	const pixman_box32_t *rects =
++		pixman_region32_rectangles(damage, &rect_count);
++	if (rect_count <= 0) {
++		return true;
++	}
++
++	VkBufferImageCopy *regions = calloc((size_t)rect_count,
++		sizeof(*regions));
++	if (regions == NULL) {
++		return false;
++	}
++	for (int i = 0; i < rect_count; i++) {
++		int width = rects[i].x2 - rects[i].x1;
++		int height = rects[i].y2 - rects[i].y1;
++		if (width <= 0 || height <= 0) {
++			free(regions);
++			return false;
++		}
++		regions[i] = (VkBufferImageCopy){
++			.bufferOffset = ((VkDeviceSize)rects[i].y1 * destination_stride +
++				(VkDeviceSize)rects[i].x1) * 4,
++			.bufferRowLength = destination_stride,
++			.bufferImageHeight = 0,
++			.imageSubresource = {
++				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
++				.mipLevel = 0,
++				.baseArrayLayer = 0,
++				.layerCount = 1,
++			},
++			.imageOffset = {
++				.x = rects[i].x1,
++				.y = rects[i].y1,
++				.z = 0,
++			},
++			.imageExtent = {
++				.width = (uint32_t)width,
++				.height = (uint32_t)height,
++				.depth = 1,
++			},
++		};
++		result->copied_bytes += (uint64_t)width * (uint64_t)height * 4;
++	}
++
++	if (!wait_source_dmabuf(source_dmabuf->fd[0],
++			&result->source_wait_ns)) {
++		free(regions);
++		return false;
++	}
++
++	VkResult res = vkResetCommandBuffer(bridge->command_buffer, 0);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkResetCommandBuffer", res);
++		free(regions);
++		return false;
++	}
++	VkCommandBufferBeginInfo begin_info = {
++		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
++		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
++	};
++	res = vkBeginCommandBuffer(bridge->command_buffer, &begin_info);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkBeginCommandBuffer", res);
++		free(regions);
++		return false;
++	}
++
++	VkImageMemoryBarrier source_acquire = {
++		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
++		.srcAccessMask = 0,
++		.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
++		.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
++		.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
++		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_FOREIGN_EXT,
++		.dstQueueFamilyIndex = bridge->device->queue_family,
++		.image = source->image,
++		.subresourceRange = {
++			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
++			.baseMipLevel = 0,
++			.levelCount = 1,
++			.baseArrayLayer = 0,
++			.layerCount = 1,
++		},
++	};
++	VkBufferMemoryBarrier destination_acquire = {
++		.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
++		.srcAccessMask = 0,
++		.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
++		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_FOREIGN_EXT,
++		.dstQueueFamilyIndex = bridge->device->queue_family,
++		.buffer = destination->buffer,
++		.offset = 0,
++		.size = VK_WHOLE_SIZE,
++	};
++	vkCmdPipelineBarrier(bridge->command_buffer,
++		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
++		0, NULL, 1, &destination_acquire, 1, &source_acquire);
++
++	vkCmdCopyImageToBuffer(bridge->command_buffer, source->image,
++		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destination->buffer,
++		(uint32_t)rect_count, regions);
++
++	VkImageMemoryBarrier source_release = source_acquire;
++	source_release.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
++	source_release.dstAccessMask = 0;
++	source_release.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
++	source_release.newLayout = VK_IMAGE_LAYOUT_GENERAL;
++	source_release.srcQueueFamilyIndex = bridge->device->queue_family;
++	source_release.dstQueueFamilyIndex = VK_QUEUE_FAMILY_FOREIGN_EXT;
++	VkBufferMemoryBarrier destination_release = destination_acquire;
++	destination_release.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
++	destination_release.dstAccessMask = 0;
++	destination_release.srcQueueFamilyIndex = bridge->device->queue_family;
++	destination_release.dstQueueFamilyIndex = VK_QUEUE_FAMILY_FOREIGN_EXT;
++	vkCmdPipelineBarrier(bridge->command_buffer,
++		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
++		0, NULL, 1, &destination_release, 1, &source_release);
++
++	res = vkEndCommandBuffer(bridge->command_buffer);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkEndCommandBuffer", res);
++		free(regions);
++		return false;
++	}
++	free(regions);
++
++	VkSubmitInfo submit_info = {
++		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
++		.commandBufferCount = 1,
++		.pCommandBuffers = &bridge->command_buffer,
++	};
++	uint64_t gpu_start = monotonic_nsec();
++	res = vkQueueSubmit(bridge->device->queue, 1, &submit_info, VK_NULL_HANDLE);
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkQueueSubmit", res);
++		return false;
++	}
++	res = vkQueueWaitIdle(bridge->device->queue);
++	result->gpu_ns = monotonic_nsec() - gpu_start;
++	if (res != VK_SUCCESS) {
++		wlr_vk_error("Android Vulkan bridge: vkQueueWaitIdle", res);
++		return false;
++	}
++	return true;
++}

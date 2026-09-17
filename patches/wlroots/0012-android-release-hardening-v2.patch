@@ -1,0 +1,100 @@
+diff --git a/include/render/dmabuf.h b/include/render/dmabuf.h
+index 145adb1..9a69380 100644
+--- a/include/render/dmabuf.h
++++ b/include/render/dmabuf.h
+@@ -5,9 +5,11 @@
+ #include <stdint.h>
+ 
+ // Copied from <linux/dma-buf.h> to avoid #ifdef soup
++#ifndef DMA_BUF_SYNC_READ
+ #define DMA_BUF_SYNC_READ      (1 << 0)
+ #define DMA_BUF_SYNC_WRITE     (2 << 0)
+ #define DMA_BUF_SYNC_RW        (DMA_BUF_SYNC_READ | DMA_BUF_SYNC_WRITE)
++#endif
+ 
+ /**
+  * Check whether DMA-BUF import/export from/to sync_file is available.
+@@ -32,6 +34,11 @@ bool dmabuf_import_sync_file(int dmabuf_fd, uint32_t flags, int sync_file_fd);
+  */
+ int dmabuf_export_sync_file(int dmabuf_fd, uint32_t flags);
+ 
++/**
++ * Wait until implicit DMA-BUF fences permit the requested CPU access.
++ */
++bool dmabuf_wait_for_implicit_fences(int dmabuf_fd, uint32_t flags);
++
+ /**
+  * Wait for implicit DMA-BUF fences, then begin a CPU mmap access session.
+  * The access must be paired with dmabuf_cpu_end().
+diff --git a/render/android/renderer.c b/render/android/renderer.c
+index a5a4f64..f2fe872 100644
+--- a/render/android/renderer.c
++++ b/render/android/renderer.c
+@@ -884,6 +884,13 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 	}
+ #endif
+ 
++	if (!android_gl_finish(renderer)) {
++		wlr_log(WLR_ERROR,
++			"Android staging could not finish previous GLES reads before CPU fallback");
++		pixman_region32_fini(&copy_region);
++		return false;
++	}
++
+ 	bool source_cpu_sync = false;
+ 	if (renderer->dmabuf_cpu_sync &&
+ 			have_source_dmabuf && source_dmabuf.n_planes == 1) {
+diff --git a/render/android/vulkan_bridge.c b/render/android/vulkan_bridge.c
+index cfbf3b0..1b94f87 100644
+--- a/render/android/vulkan_bridge.c
++++ b/render/android/vulkan_bridge.c
+@@ -761,6 +761,13 @@ struct wlr_android_vk_bridge *wlr_android_vk_bridge_create(void) {
+ 				strstr(props.deviceName, filter) == NULL) {
+ 			continue;
+ 		}
++		if ((filter == NULL || *filter == '\0') &&
++				props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU) {
++			wlr_log(WLR_DEBUG,
++				"Android Vulkan bridge: Skipping software Vulkan device %s",
++				props.deviceName);
++			continue;
++		}
+ 
+ 		struct wlr_vk_device *candidate =
+ 			vulkan_device_create(instance, physical_devices[i]);
+diff --git a/render/dmabuf_linux.c b/render/dmabuf_linux.c
+index 1cc9d9c..2a0d9fb 100644
+--- a/render/dmabuf_linux.c
++++ b/render/dmabuf_linux.c
+@@ -102,7 +102,7 @@ int dmabuf_export_sync_file(int dmabuf_fd, uint32_t flags) {
+ }
+ 
+ 
+-static bool dmabuf_wait_for_implicit_fences(int dmabuf_fd, uint32_t flags) {
++bool dmabuf_wait_for_implicit_fences(int dmabuf_fd, uint32_t flags) {
+ 	short events = (flags & DMA_BUF_SYNC_WRITE) != 0 ? POLLOUT : POLLIN;
+ 	struct pollfd pfd = {
+ 		.fd = dmabuf_fd,
+diff --git a/types/wlr_linux_dmabuf_v1.c b/types/wlr_linux_dmabuf_v1.c
+index c32c213..015b27a 100644
+--- a/types/wlr_linux_dmabuf_v1.c
++++ b/types/wlr_linux_dmabuf_v1.c
+@@ -18,6 +18,7 @@
+ #include <wlr/util/log.h>
+ #include <xf86drm.h>
+ #include "linux-dmabuf-unstable-v1-protocol.h"
++#include "render/dmabuf.h"
+ #include "render/drm_format_set.h"
+ #include "util/shm.h"
+ 
+@@ -178,6 +179,10 @@ static bool buffer_begin_data_ptr_access(struct wlr_buffer *wlr_buffer,
+ 			attribs->stride[0], attribs->format);
+ 	}
+ 
++	if (!dmabuf_wait_for_implicit_fences(attribs->fd[0], DMA_BUF_SYNC_READ)) {
++		return false;
++	}
++
+ 	struct dma_buf_sync sync = {
+ 		.flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ,
+ 	};

@@ -1,0 +1,21 @@
+--- a/hybris/egl/egl.c
++++ b/hybris/egl/egl.c
+@@ -636,9 +636,17 @@
+ 
+ EGLBoolean eglGetConfigAttrib(EGLDisplay dpy, EGLConfig config, EGLint attribute, EGLint *value) {
+ 	EGLBoolean ret;
++	EGLDisplay real_dpy = dpy;
++	int i;
+ 	HYBRIS_TRACE_BEGIN("hybris-egl", "eglGetConfigAttrib", "");
+ 	HYBRIS_DLSYSM(egl, &_eglGetConfigAttrib, "eglGetConfigAttrib");
+-	ret = (*_eglGetConfigAttrib)(dpy, config, attribute, value);
++	for (i = 0; i < _EGL_MAX_DISPLAYS; i++) {
++		if (_displayMappings[i] && (EGLDisplay)_displayMappings[i] == dpy) {
++			real_dpy = _displayMappings[i]->dpy;
++			break;
++		}
++	}
++	ret = (*_eglGetConfigAttrib)(real_dpy, config, attribute, value);
+ 	ws_getConfigAttrib(&dpy, &config, &attribute, value);
+ 	HYBRIS_TRACE_END("hybris-egl", "eglGetConfigAttrib", "");
+ 	return ret;

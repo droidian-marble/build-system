@@ -1,0 +1,195 @@
+diff --git a/include/render/android.h b/include/render/android.h
+index fddf5acf..010c237c 100644
+--- a/include/render/android.h
++++ b/include/render/android.h
+@@ -28,6 +28,8 @@ struct wlr_android_renderer {
+ 	bool dmabuf_stats;
+ 	size_t dmabuf_staging_pool_max;
+ 	size_t dmabuf_staging_pool_len;
++	size_t dmabuf_staging_pool_bytes;
++	size_t dmabuf_staging_pool_bytes_max;
+ 	size_t dmabuf_coalesce_rects;
+ 	struct wl_list dmabuf_staging_pool;
+ 
+@@ -46,6 +48,8 @@ struct wlr_android_renderer {
+ 		uint64_t unlock_ns;
+ 		uint64_t pool_hits;
+ 		uint64_t pool_misses;
++		uint64_t pool_evictions;
++		uint64_t pool_oversize_drops;
+ 		uint64_t bgra_fallbacks;
+ 		uint64_t bgra_runtime_disables;
+ 		uint64_t eglimage_failures;
+diff --git a/render/android/renderer.c b/render/android/renderer.c
+index 50f5bf62..821df84b 100644
+--- a/render/android/renderer.c
++++ b/render/android/renderer.c
+@@ -62,6 +62,7 @@ struct wlr_android_staging_buffer {
+ 	uint32_t source_format;
+ 	int android_format;
+ 	int usage;
++	size_t allocation_bytes;
+ 	int refs;
+ };
+ 
+@@ -134,13 +135,18 @@ static void android_staging_stats_maybe_log(
+ 	double unlock_ms = updates > 0 ?
+ 		(double)renderer->dmabuf_staging_stats.unlock_ns /
+ 		(double)updates / 1000000.0 : 0.0;
++	double pool_cached_mib =
++		(double)renderer->dmabuf_staging_pool_bytes /
++		(1024.0 * 1024.0);
+ 
+ 	wlr_log(WLR_INFO,
+ 		"Android dmabuf staging stats: updates=%" PRIu64
+ 		" full=%" PRIu64 " damage=%" PRIu64 " coalesced=%" PRIu64
+ 		" direct=%" PRIu64 " neon=%" PRIu64 " scalar=%" PRIu64
+ 		" copy=%.1f MiB/s lock=%.3fms copy_cpu=%.3fms unlock=%.3fms"
+-		" pool=%" PRIu64 "/%" PRIu64 " bgra_fallback=%" PRIu64
++		" pool_hit=%" PRIu64 " pool_miss=%" PRIu64
++		" pool_evict=%" PRIu64 " pool_drop=%" PRIu64
++		" pool_cached=%.1fMiB bgra_fallback=%" PRIu64
+ 		" bgra_disabled=%" PRIu64 " eglimage_fail=%" PRIu64
+ 		" gl_import_fail=%" PRIu64 " generic_fallback=%" PRIu64
+ 		" failures=%" PRIu64,
+@@ -154,6 +160,9 @@ static void android_staging_stats_maybe_log(
+ 		copy_mib_s, lock_ms, copy_ms, unlock_ms,
+ 		renderer->dmabuf_staging_stats.pool_hits,
+ 		renderer->dmabuf_staging_stats.pool_misses,
++		renderer->dmabuf_staging_stats.pool_evictions,
++		renderer->dmabuf_staging_stats.pool_oversize_drops,
++		pool_cached_mib,
+ 		renderer->dmabuf_staging_stats.bgra_fallbacks,
+ 		renderer->dmabuf_staging_stats.bgra_runtime_disables,
+ 		renderer->dmabuf_staging_stats.eglimage_failures,
+@@ -189,6 +198,16 @@ static void android_staging_release_buffer(
+ 	free(staging);
+ }
+ 
++static void android_staging_pool_remove(
++		struct wlr_android_renderer *renderer,
++		struct wlr_android_staging_buffer *staging) {
++	wl_list_remove(&staging->pool_link);
++	assert(renderer->dmabuf_staging_pool_len > 0);
++	assert(renderer->dmabuf_staging_pool_bytes >= staging->allocation_bytes);
++	renderer->dmabuf_staging_pool_len--;
++	renderer->dmabuf_staging_pool_bytes -= staging->allocation_bytes;
++}
++
+ static struct wlr_android_staging_buffer *android_staging_pool_take(
+ 		struct wlr_android_renderer *renderer, int width, int height,
+ 		int android_format, int usage) {
+@@ -201,8 +220,7 @@ static struct wlr_android_staging_buffer *android_staging_pool_take(
+ 			continue;
+ 		}
+ 
+-		wl_list_remove(&staging->pool_link);
+-		renderer->dmabuf_staging_pool_len--;
++		android_staging_pool_remove(renderer, staging);
+ 		staging->refs = 1;
+ 		if (renderer->dmabuf_stats) {
+ 			renderer->dmabuf_staging_stats.pool_hits++;
+@@ -216,18 +234,46 @@ static struct wlr_android_staging_buffer *android_staging_pool_take(
+ 	return NULL;
+ }
+ 
++static void android_staging_pool_evict_lru(
++		struct wlr_android_renderer *renderer) {
++	if (wl_list_empty(&renderer->dmabuf_staging_pool)) {
++		return;
++	}
++
++	struct wlr_android_staging_buffer *staging = wl_container_of(
++		renderer->dmabuf_staging_pool.prev, staging, pool_link);
++	android_staging_pool_remove(renderer, staging);
++	if (renderer->dmabuf_stats) {
++		renderer->dmabuf_staging_stats.pool_evictions++;
++	}
++	android_staging_release_buffer(staging);
++}
++
+ static void android_staging_pool_put(
+ 		struct wlr_android_staging_buffer *staging) {
+ 	struct wlr_android_renderer *renderer = staging->renderer;
+ 	if (renderer->dmabuf_staging_pool_max == 0 ||
+-			renderer->dmabuf_staging_pool_len >=
+-			renderer->dmabuf_staging_pool_max) {
++			renderer->dmabuf_staging_pool_bytes_max == 0 ||
++			staging->allocation_bytes >
++			renderer->dmabuf_staging_pool_bytes_max) {
++		if (renderer->dmabuf_stats) {
++			renderer->dmabuf_staging_stats.pool_oversize_drops++;
++		}
+ 		android_staging_release_buffer(staging);
+ 		return;
+ 	}
+ 
++	while (renderer->dmabuf_staging_pool_len >=
++			renderer->dmabuf_staging_pool_max ||
++			renderer->dmabuf_staging_pool_bytes >
++				renderer->dmabuf_staging_pool_bytes_max -
++				staging->allocation_bytes) {
++		android_staging_pool_evict_lru(renderer);
++	}
++
+ 	wl_list_insert(&renderer->dmabuf_staging_pool, &staging->pool_link);
+ 	renderer->dmabuf_staging_pool_len++;
++	renderer->dmabuf_staging_pool_bytes += staging->allocation_bytes;
+ }
+ 
+ static void android_staging_pool_finish(
+@@ -235,10 +281,11 @@ static void android_staging_pool_finish(
+ 	struct wlr_android_staging_buffer *staging, *tmp;
+ 	wl_list_for_each_safe(staging, tmp,
+ 			&renderer->dmabuf_staging_pool, pool_link) {
+-		wl_list_remove(&staging->pool_link);
++		android_staging_pool_remove(renderer, staging);
+ 		android_staging_release_buffer(staging);
+ 	}
+-	renderer->dmabuf_staging_pool_len = 0;
++	assert(renderer->dmabuf_staging_pool_len == 0);
++	assert(renderer->dmabuf_staging_pool_bytes == 0);
+ }
+ 
+ static struct wlr_android_staging_buffer *android_staging_allocate(
+@@ -273,6 +320,14 @@ static struct wlr_android_staging_buffer *android_staging_allocate(
+ 	}
+ 
+ 	staging->stride = stride;
++	if (height <= 0 || (size_t)stride > SIZE_MAX / 4 / (size_t)height) {
++		wlr_log(WLR_ERROR,
++			"Android staging allocation size overflow: %ux%d",
++			stride, height);
++		android_staging_release_buffer(staging);
++		return NULL;
++	}
++	staging->allocation_bytes = (size_t)stride * (size_t)height * 4;
+ 	staging->native_buffer.common.magic = ANDROID_NATIVE_BUFFER_MAGIC;
+ 	staging->native_buffer.common.version = sizeof(ANativeWindowBuffer);
+ 	staging->native_buffer.common.incRef = android_staging_incref;
+@@ -1106,6 +1161,10 @@ struct wlr_renderer *wlr_android_renderer_create(void) {
+ 		"WLR_ANDROID_DMABUF_STATS", false);
+ 	renderer->dmabuf_staging_pool_max = android_env_size(
+ 		"WLR_ANDROID_DMABUF_STAGING_POOL", 2, 8);
++	size_t pool_mib = android_env_size(
++		"WLR_ANDROID_DMABUF_STAGING_POOL_MIB", 64, 512);
++	renderer->dmabuf_staging_pool_bytes_max =
++		pool_mib * 1024u * 1024u;
+ 	renderer->dmabuf_coalesce_rects = android_env_size(
+ 		"WLR_ANDROID_DMABUF_COALESCE_RECTS", 8, 64);
+ 
+@@ -1130,11 +1189,13 @@ struct wlr_renderer *wlr_android_renderer_create(void) {
+ 	if (renderer->dmabuf_staging) {
+ 		wlr_log(WLR_INFO,
+ 			"Android linux-dmabuf gralloc staging enabled: "
+-			"bgra=%d hwc=%d neon=%d pool=%zu coalesce=%zu stats=%d",
++			"bgra=%d hwc=%d neon=%d pool=%zu pool_mib=%zu "
++			"coalesce=%zu stats=%d",
+ 			renderer->dmabuf_staging_bgra,
+ 			renderer->dmabuf_staging_hwc,
+ 			renderer->dmabuf_staging_neon,
+ 			renderer->dmabuf_staging_pool_max,
++			pool_mib,
+ 			renderer->dmabuf_coalesce_rects,
+ 			renderer->dmabuf_stats);
+ 	}

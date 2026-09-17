@@ -1,0 +1,54 @@
+{
+  "defaults": {
+    "image": "quay.io/droidian/build-essential:next-arm64",
+    "deb_build_options": "nocheck",
+    "deb_fullname": "Droidian Patch Builder",
+    "deb_email": "builder@localhost",
+    "apt_packages": [
+      "devscripts",
+      "equivs",
+      "dpkg-dev"
+    ]
+  },
+  "projects": [
+    {
+      "name": "libhybris",
+      "enabled": true,
+      "repo": "https://github.com/droidian/libhybris.git",
+      "branch": "feature/next/lindroid-drm",
+      "apt_packages": [
+        "android-headers-30"
+      ],
+      "before_build": "",
+      "dependencies": []
+    },
+    {
+      "name": "wlroots",
+      "enabled": true,
+      "repo": "https://github.com/droidian/wlroots.git",
+      "branch": "feature/next/backport-0.18",
+      "apt_packages": [
+        "android-headers-30",
+        "python3"
+      ],
+      "before_build": "",
+      "dependencies": [
+        {
+          "project": "libhybris",
+          "packages": [
+            "libandroid-properties1",
+            "libandroid-properties-dev",
+            "libhardware2",
+            "libhardware-dev",
+            "libhybris-common1",
+            "libhybris-common-dev",
+            "libhybris",
+            "libhybris-dev",
+            "libmedia1",
+            "libmedia-dev"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,203 @@
+diff --git a/include/render/android.h b/include/render/android.h
+index 010c237c..98569eb5 100644
+--- a/include/render/android.h
++++ b/include/render/android.h
+@@ -31,6 +31,8 @@ struct wlr_android_renderer {
+ 	size_t dmabuf_staging_pool_bytes;
+ 	size_t dmabuf_staging_pool_bytes_max;
+ 	size_t dmabuf_coalesce_rects;
++	size_t dmabuf_coalesce_overdraw_pct;
++	size_t dmabuf_full_copy_pct;
+ 	struct wl_list dmabuf_staging_pool;
+ 
+ 	struct {
+@@ -38,10 +40,14 @@ struct wlr_android_renderer {
+ 		uint64_t updates;
+ 		uint64_t full_copies;
+ 		uint64_t damage_updates;
++		uint64_t exact_updates;
+ 		uint64_t coalesced_updates;
++		uint64_t full_promotions;
++		uint64_t skipped_updates;
+ 		uint64_t direct_updates;
+ 		uint64_t neon_updates;
+ 		uint64_t scalar_updates;
++		uint64_t requested_bytes;
+ 		uint64_t copied_bytes;
+ 		uint64_t lock_ns;
+ 		uint64_t copy_ns;
+diff --git a/render/android/renderer.c b/render/android/renderer.c
+index 821df84b..59ac8d10 100644
+--- a/render/android/renderer.c
++++ b/render/android/renderer.c
+@@ -123,9 +123,15 @@ static void android_staging_stats_maybe_log(
+ 
+ 	double elapsed_s = (double)elapsed_ns / 1000000000.0;
+ 	uint64_t updates = renderer->dmabuf_staging_stats.updates;
++	double requested_mib_s = elapsed_s > 0.0 ?
++		(double)renderer->dmabuf_staging_stats.requested_bytes /
++		(1024.0 * 1024.0 * elapsed_s) : 0.0;
+ 	double copy_mib_s = elapsed_s > 0.0 ?
+ 		(double)renderer->dmabuf_staging_stats.copied_bytes /
+ 		(1024.0 * 1024.0 * elapsed_s) : 0.0;
++	double overcopy = renderer->dmabuf_staging_stats.requested_bytes > 0 ?
++		(double)renderer->dmabuf_staging_stats.copied_bytes /
++		(double)renderer->dmabuf_staging_stats.requested_bytes : 1.0;
+ 	double lock_ms = updates > 0 ?
+ 		(double)renderer->dmabuf_staging_stats.lock_ns /
+ 		(double)updates / 1000000.0 : 0.0;
+@@ -141,9 +147,11 @@ static void android_staging_stats_maybe_log(
+ 
+ 	wlr_log(WLR_INFO,
+ 		"Android dmabuf staging stats: updates=%" PRIu64
+-		" full=%" PRIu64 " damage=%" PRIu64 " coalesced=%" PRIu64
++		" full=%" PRIu64 " damage=%" PRIu64 " exact=%" PRIu64
++		" coalesced=%" PRIu64 " promoted=%" PRIu64 " skipped=%" PRIu64
+ 		" direct=%" PRIu64 " neon=%" PRIu64 " scalar=%" PRIu64
+-		" copy=%.1f MiB/s lock=%.3fms copy_cpu=%.3fms unlock=%.3fms"
++		" requested=%.1f MiB/s copy=%.1f MiB/s overcopy=%.2fx"
++		" lock=%.3fms copy_cpu=%.3fms unlock=%.3fms"
+ 		" pool_hit=%" PRIu64 " pool_miss=%" PRIu64
+ 		" pool_evict=%" PRIu64 " pool_drop=%" PRIu64
+ 		" pool_cached=%.1fMiB bgra_fallback=%" PRIu64
+@@ -153,11 +161,15 @@ static void android_staging_stats_maybe_log(
+ 		updates,
+ 		renderer->dmabuf_staging_stats.full_copies,
+ 		renderer->dmabuf_staging_stats.damage_updates,
++		renderer->dmabuf_staging_stats.exact_updates,
+ 		renderer->dmabuf_staging_stats.coalesced_updates,
++		renderer->dmabuf_staging_stats.full_promotions,
++		renderer->dmabuf_staging_stats.skipped_updates,
+ 		renderer->dmabuf_staging_stats.direct_updates,
+ 		renderer->dmabuf_staging_stats.neon_updates,
+ 		renderer->dmabuf_staging_stats.scalar_updates,
+-		copy_mib_s, lock_ms, copy_ms, unlock_ms,
++		requested_mib_s, copy_mib_s, overcopy,
++		lock_ms, copy_ms, unlock_ms,
+ 		renderer->dmabuf_staging_stats.pool_hits,
+ 		renderer->dmabuf_staging_stats.pool_misses,
+ 		renderer->dmabuf_staging_stats.pool_evictions,
+@@ -417,6 +429,11 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 		pixman_region32_intersect(&copy_region, &copy_region, damage);
+ 	}
+ 	if (!pixman_region32_not_empty(&copy_region)) {
++		if (renderer->dmabuf_stats) {
++			renderer->dmabuf_staging_stats.skipped_updates++;
++			android_staging_stats_maybe_log(renderer,
++				android_monotonic_nsec());
++		}
+ 		ok = true;
+ 		goto out_region;
+ 	}
+@@ -433,17 +450,40 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 	}
+ 	uint64_t bounds_area = (uint64_t)(bounds->x2 - bounds->x1) *
+ 		(uint64_t)(bounds->y2 - bounds->y1);
+-
+-	bool coalesced = renderer->dmabuf_coalesce_rects > 0 &&
++	uint64_t total_area = (uint64_t)buffer->width *
++		(uint64_t)buffer->height;
++
++	bool promoted_full = damage != NULL &&
++		renderer->dmabuf_full_copy_pct > 0 &&
++		(long double)damage_area * 100.0L >=
++			(long double)total_area *
++			(long double)renderer->dmabuf_full_copy_pct;
++	bool coalesced = !promoted_full &&
++		renderer->dmabuf_coalesce_rects > 0 &&
++		renderer->dmabuf_coalesce_overdraw_pct > 0 &&
+ 		(size_t)rects_len > renderer->dmabuf_coalesce_rects &&
+-		bounds_area <= damage_area * 2;
+-	pixman_box32_t coalesced_rect;
+-	if (coalesced) {
+-		coalesced_rect = *bounds;
+-		rects = &coalesced_rect;
++		(long double)bounds_area * 100.0L <=
++			(long double)damage_area *
++			(long double)renderer->dmabuf_coalesce_overdraw_pct;
++
++	pixman_box32_t adaptive_rect;
++	if (promoted_full) {
++		adaptive_rect = (pixman_box32_t){
++			.x1 = 0,
++			.y1 = 0,
++			.x2 = buffer->width,
++			.y2 = buffer->height,
++		};
++		rects = &adaptive_rect;
++		rects_len = 1;
++	} else if (coalesced) {
++		adaptive_rect = *bounds;
++		rects = &adaptive_rect;
+ 		rects_len = 1;
+ 	}
+ 
++	pixman_box32_t lock_bounds = promoted_full ? adaptive_rect : *bounds;
++
+ 	void *dst_data = NULL;
+ 	uint64_t lock_start = 0;
+ 	uint64_t lock_end = 0;
+@@ -455,8 +495,9 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 
+ 	int ret = hybris_gralloc_lock(staging->handle,
+ 		GRALLOC_USAGE_SW_WRITE_OFTEN,
+-		bounds->x1, bounds->y1,
+-		bounds->x2 - bounds->x1, bounds->y2 - bounds->y1,
++		lock_bounds.x1, lock_bounds.y1,
++		lock_bounds.x2 - lock_bounds.x1,
++		lock_bounds.y2 - lock_bounds.y1,
+ 		&dst_data);
+ 	if (renderer->dmabuf_stats) {
+ 		lock_end = android_monotonic_nsec();
+@@ -530,6 +571,7 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 			rects[0].y1 == 0 && rects[0].x2 == buffer->width &&
+ 			rects[0].y2 == buffer->height;
+ 		renderer->dmabuf_staging_stats.updates++;
++		renderer->dmabuf_staging_stats.requested_bytes += damage_area * 4;
+ 		renderer->dmabuf_staging_stats.copied_bytes += copied_bytes;
+ 		renderer->dmabuf_staging_stats.lock_ns += lock_end - lock_start;
+ 		renderer->dmabuf_staging_stats.copy_ns += copy_end - lock_end;
+@@ -539,9 +581,15 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 		} else {
+ 			renderer->dmabuf_staging_stats.damage_updates++;
+ 		}
++		if (damage != NULL && !coalesced && !promoted_full) {
++			renderer->dmabuf_staging_stats.exact_updates++;
++		}
+ 		if (coalesced) {
+ 			renderer->dmabuf_staging_stats.coalesced_updates++;
+ 		}
++		if (promoted_full) {
++			renderer->dmabuf_staging_stats.full_promotions++;
++		}
+ 		if (direct_copy) {
+ 			renderer->dmabuf_staging_stats.direct_updates++;
+ 		} else if (used_neon) {
+@@ -1167,6 +1215,10 @@ struct wlr_renderer *wlr_android_renderer_create(void) {
+ 		pool_mib * 1024u * 1024u;
+ 	renderer->dmabuf_coalesce_rects = android_env_size(
+ 		"WLR_ANDROID_DMABUF_COALESCE_RECTS", 8, 64);
++	renderer->dmabuf_coalesce_overdraw_pct = android_env_size(
++		"WLR_ANDROID_DMABUF_COALESCE_OVERDRAW_PCT", 200, 1000);
++	renderer->dmabuf_full_copy_pct = android_env_size(
++		"WLR_ANDROID_DMABUF_FULL_COPY_PCT", 90, 100);
+ 
+ 	if (renderer->dmabuf_stats) {
+ 		renderer->dmabuf_staging_stats.window_start_ns =
+@@ -1190,13 +1242,15 @@ struct wlr_renderer *wlr_android_renderer_create(void) {
+ 		wlr_log(WLR_INFO,
+ 			"Android linux-dmabuf gralloc staging enabled: "
+ 			"bgra=%d hwc=%d neon=%d pool=%zu pool_mib=%zu "
+-			"coalesce=%zu stats=%d",
++			"coalesce=%zu overdraw=%zu%% full_copy=%zu%% stats=%d",
+ 			renderer->dmabuf_staging_bgra,
+ 			renderer->dmabuf_staging_hwc,
+ 			renderer->dmabuf_staging_neon,
+ 			renderer->dmabuf_staging_pool_max,
+ 			pool_mib,
+ 			renderer->dmabuf_coalesce_rects,
++			renderer->dmabuf_coalesce_overdraw_pct,
++			renderer->dmabuf_full_copy_pct,
+ 			renderer->dmabuf_stats);
+ 	}
+ 	wlr_drm_format_set_add(&renderer->shm_formats, DRM_FORMAT_XRGB8888, DRM_FORMAT_MOD_LINEAR);

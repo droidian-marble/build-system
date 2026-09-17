@@ -1,0 +1,440 @@
+diff --git a/include/render/android.h b/include/render/android.h
+index de69a90f..fad80df0 100644
+--- a/include/render/android.h
++++ b/include/render/android.h
+@@ -17,6 +17,7 @@ struct wlr_android_renderer {
+ 
+ 	struct wl_list buffers; // wlr_gles2_buffer.link
+ 	struct wlr_drm_format_set shm_formats;
++	bool dmabuf_staging;
+ };
+ 
+ struct wlr_android_buffer {
+diff --git a/include/render/gles2.h b/include/render/gles2.h
+index 992cc220..e002fecd 100644
+--- a/include/render/gles2.h
++++ b/include/render/gles2.h
+@@ -132,6 +132,11 @@ struct wlr_gles2_texture {
+ 	// If imported from a wlr_buffer
+ 	struct wlr_buffer *buffer;
+ 	struct wlr_addon buffer_addon;
++
++	bool (*external_update)(struct wlr_gles2_texture *texture,
++		struct wlr_buffer *buffer, const pixman_region32_t *damage);
++	void (*external_destroy)(struct wlr_gles2_texture *texture);
++	void *external_data;
+ };
+ 
+ struct wlr_gles2_render_pass {
+diff --git a/render/android/renderer.c b/render/android/renderer.c
+index 37df2187..49527a5f 100644
+--- a/render/android/renderer.c
++++ b/render/android/renderer.c
+@@ -1,6 +1,8 @@
+ #define _POSIX_C_SOURCE 199309L
+ #include <assert.h>
+ #include <stdlib.h>
++#include <string.h>
++#include <android/hardware/gralloc.h>
+ #include "render/android.h"
+ #include "render/egl.h"
+ #include "render/gles2.h"
+@@ -38,6 +40,332 @@ struct wlr_egl *wlr_android_renderer_get_egl(struct wlr_renderer *wlr_renderer)
+ 	return gles2_renderer->egl;
+ }
+ 
++int hybris_gralloc_allocate(int width, int height, int format, int usage,
++	buffer_handle_t *handle, uint32_t *stride);
++int hybris_gralloc_release(buffer_handle_t handle, int was_allocated);
++int hybris_gralloc_lock(buffer_handle_t handle, int usage, int l, int t,
++	int w, int h, void **vaddr);
++int hybris_gralloc_unlock(buffer_handle_t handle);
++
++struct wlr_android_staging_buffer {
++	ANativeWindowBuffer native_buffer;
++	buffer_handle_t handle;
++	uint32_t stride;
++	int refs;
++};
++
++static void android_staging_incref(struct android_native_base_t *base) {
++	struct wlr_android_staging_buffer *staging;
++	staging = wl_container_of((ANativeWindowBuffer *)base, staging, native_buffer);
++	__sync_fetch_and_add(&staging->refs, 1);
++}
++
++static void android_staging_decref(struct android_native_base_t *base) {
++	struct wlr_android_staging_buffer *staging;
++	staging = wl_container_of((ANativeWindowBuffer *)base, staging, native_buffer);
++	__sync_fetch_and_sub(&staging->refs, 1);
++}
++
++static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
++		struct wlr_buffer *buffer, const pixman_region32_t *damage) {
++	void *src_data = NULL;
++	uint32_t src_format = DRM_FORMAT_INVALID;
++	size_t src_stride = 0;
++	if (!wlr_buffer_begin_data_ptr_access(buffer,
++			WLR_BUFFER_DATA_PTR_ACCESS_READ, &src_data, &src_format, &src_stride)) {
++		return false;
++	}
++
++	bool ok = false;
++	if ((src_format != DRM_FORMAT_ARGB8888 && src_format != DRM_FORMAT_XRGB8888) ||
++			buffer->width != staging->native_buffer.width ||
++			buffer->height != staging->native_buffer.height ||
++			src_stride < (size_t)buffer->width * 4) {
++		goto out_src;
++	}
++
++	void *dst_data = NULL;
++	int ret = hybris_gralloc_lock(staging->handle, GRALLOC_USAGE_SW_WRITE_OFTEN,
++		0, 0, buffer->width, buffer->height, &dst_data);
++	if (ret != 0 || dst_data == NULL) {
++		wlr_log(WLR_ERROR, "Failed to lock Android staging gralloc buffer: %d", ret);
++		goto out_src;
++	}
++
++	pixman_region32_t full_damage;
++	const pixman_region32_t *copy_damage = damage;
++	if (copy_damage == NULL) {
++		pixman_region32_init_rect(&full_damage, 0, 0,
++			buffer->width, buffer->height);
++		copy_damage = &full_damage;
++	}
++
++	int rects_len = 0;
++	const pixman_box32_t *rects =
++		pixman_region32_rectangles(copy_damage, &rects_len);
++
++	for (int i = 0; i < rects_len; i++) {
++		int x1 = rects[i].x1 < 0 ? 0 : rects[i].x1;
++		int y1 = rects[i].y1 < 0 ? 0 : rects[i].y1;
++		int x2 = rects[i].x2 > buffer->width ?
++			buffer->width : rects[i].x2;
++		int y2 = rects[i].y2 > buffer->height ?
++			buffer->height : rects[i].y2;
++
++		if (x1 >= x2 || y1 >= y2) {
++			continue;
++		}
++
++		for (int y = y1; y < y2; y++) {
++			const uint32_t *src =
++				(const uint32_t *)((const char *)src_data +
++				(size_t)y * src_stride) + x1;
++
++			uint32_t *dst =
++				(uint32_t *)dst_data +
++				(size_t)y * staging->stride + x1;
++
++			for (int x = x1; x < x2; x++) {
++				uint32_t pixel = *src++;
++
++				uint32_t alpha =
++					src_format == DRM_FORMAT_XRGB8888 ?
++					0xFF000000u :
++					pixel & 0xFF000000u;
++
++				uint32_t red =
++					(pixel >> 16) & 0xFFu;
++				uint32_t green =
++					(pixel >> 8) & 0xFFu;
++				uint32_t blue =
++					pixel & 0xFFu;
++
++				/*
++				 * DRM ARGB/XRGB8888 is BGRA/BGRX in
++				 * little-endian memory. Android
++				 * HAL_PIXEL_FORMAT_RGBA_8888 expects
++				 * RGBA byte order.
++				 */
++				*dst++ =
++					alpha |
++					(blue << 16) |
++					(green << 8) |
++					red;
++			}
++		}
++	}
++
++	if (copy_damage == &full_damage) {
++		pixman_region32_fini(&full_damage);
++	}
++
++	ret = hybris_gralloc_unlock(staging->handle);
++	if (ret != 0) {
++		wlr_log(WLR_ERROR,
++			"Failed to unlock Android staging gralloc buffer: %d",
++			ret);
++		goto out_src;
++	}
++
++	ok = true;
++
++out_src:
++	wlr_buffer_end_data_ptr_access(buffer);
++	return ok;
++}
++
++static bool android_staging_texture_update(
++		struct wlr_gles2_texture *texture,
++		struct wlr_buffer *buffer,
++		const pixman_region32_t *damage) {
++	struct wlr_android_staging_buffer *staging =
++		texture->external_data;
++
++	return android_staging_copy(staging, buffer, damage);
++}
++
++static void android_staging_texture_destroy(
++		struct wlr_gles2_texture *texture) {
++	struct wlr_android_staging_buffer *staging =
++		texture->external_data;
++
++	if (staging == NULL) {
++		return;
++	}
++
++	hybris_gralloc_release(staging->handle, 1);
++	free(staging);
++}
++
++static struct wlr_texture *android_texture_from_dmabuf_staging(
++		struct wlr_renderer *wlr_renderer,
++		struct wlr_buffer *buffer,
++		const struct wlr_dmabuf_attributes *dmabuf) {
++	if (dmabuf->n_planes != 1 ||
++			(dmabuf->format != DRM_FORMAT_ARGB8888 &&
++			dmabuf->format != DRM_FORMAT_XRGB8888) ||
++			(dmabuf->modifier != DRM_FORMAT_MOD_LINEAR &&
++			dmabuf->modifier != DRM_FORMAT_MOD_INVALID)) {
++		return NULL;
++	}
++
++	struct wlr_gles2_renderer *gles2 =
++		android_get_gles2_renderer(wlr_renderer);
++
++	if (gles2->procs.glEGLImageTargetTexture2DOES == NULL ||
++			gles2->egl->procs.eglCreateImageKHR == NULL) {
++		return NULL;
++	}
++
++	struct wlr_android_staging_buffer *staging =
++		calloc(1, sizeof(*staging));
++	if (staging == NULL) {
++		return NULL;
++	}
++
++	int usage =
++		GRALLOC_USAGE_SW_WRITE_OFTEN |
++		GRALLOC_USAGE_HW_TEXTURE |
++		GRALLOC_USAGE_HW_COMPOSER;
++
++	uint32_t stride = 0;
++
++	int ret = hybris_gralloc_allocate(
++		buffer->width,
++		buffer->height,
++		HAL_PIXEL_FORMAT_RGBA_8888,
++		usage,
++		&staging->handle,
++		&stride);
++
++	if (ret != 0 || staging->handle == NULL) {
++		wlr_log(WLR_ERROR,
++			"Failed to allocate Android staging gralloc buffer: %d",
++			ret);
++		free(staging);
++		return NULL;
++	}
++
++	staging->stride = stride;
++	staging->refs = 1;
++
++	staging->native_buffer.common.magic =
++		ANDROID_NATIVE_BUFFER_MAGIC;
++	staging->native_buffer.common.version =
++		sizeof(ANativeWindowBuffer);
++	staging->native_buffer.common.incRef =
++		android_staging_incref;
++	staging->native_buffer.common.decRef =
++		android_staging_decref;
++
++	memset(
++		staging->native_buffer.common.reserved,
++		0,
++		sizeof(staging->native_buffer.common.reserved));
++
++	staging->native_buffer.width = buffer->width;
++	staging->native_buffer.height = buffer->height;
++	staging->native_buffer.stride = stride;
++	staging->native_buffer.format =
++		HAL_PIXEL_FORMAT_RGBA_8888;
++	staging->native_buffer.usage = usage;
++	staging->native_buffer.handle = staging->handle;
++
++	if (!android_staging_copy(staging, buffer, NULL)) {
++		hybris_gralloc_release(staging->handle, 1);
++		free(staging);
++		return NULL;
++	}
++
++	struct wlr_egl_context prev_ctx;
++	wlr_egl_save_context(&prev_ctx);
++	wlr_egl_make_current(gles2->egl);
++
++	const EGLint attribs[] = {
++		EGL_NONE,
++	};
++
++	EGLImageKHR image =
++		gles2->egl->procs.eglCreateImageKHR(
++			gles2->egl->display,
++			EGL_NO_CONTEXT,
++			EGL_NATIVE_BUFFER_ANDROID,
++			(EGLClientBuffer)&staging->native_buffer,
++			attribs);
++
++	if (image == EGL_NO_IMAGE_KHR) {
++		wlr_log(WLR_ERROR,
++			"Failed to create EGLImage from Android gralloc staging buffer");
++
++		wlr_egl_restore_context(&prev_ctx);
++		hybris_gralloc_release(staging->handle, 1);
++		free(staging);
++		return NULL;
++	}
++
++	struct wlr_gles2_texture *texture =
++		gles2_texture_create(
++			gles2,
++			buffer->width,
++			buffer->height);
++
++	if (texture == NULL) {
++		wlr_egl_destroy_image(gles2->egl, image);
++		wlr_egl_restore_context(&prev_ctx);
++		hybris_gralloc_release(staging->handle, 1);
++		free(staging);
++		return NULL;
++	}
++
++	texture->target = GL_TEXTURE_EXTERNAL_OES;
++	texture->image = image;
++	texture->has_alpha =
++		dmabuf->format == DRM_FORMAT_ARGB8888;
++	texture->drm_format = DRM_FORMAT_INVALID;
++
++	texture->external_update =
++		android_staging_texture_update;
++	texture->external_destroy =
++		android_staging_texture_destroy;
++	texture->external_data = staging;
++
++	push_gles2_debug(gles2);
++
++	glGenTextures(1, &texture->tex);
++	glBindTexture(
++		GL_TEXTURE_EXTERNAL_OES,
++		texture->tex);
++
++	glTexParameteri(
++		GL_TEXTURE_EXTERNAL_OES,
++		GL_TEXTURE_WRAP_S,
++		GL_CLAMP_TO_EDGE);
++
++	glTexParameteri(
++		GL_TEXTURE_EXTERNAL_OES,
++		GL_TEXTURE_WRAP_T,
++		GL_CLAMP_TO_EDGE);
++
++	gles2->procs.glEGLImageTargetTexture2DOES(
++		GL_TEXTURE_EXTERNAL_OES,
++		image);
++
++	glBindTexture(
++		GL_TEXTURE_EXTERNAL_OES,
++		0);
++
++	pop_gles2_debug(gles2);
++
++	wlr_egl_restore_context(&prev_ctx);
++
++	wlr_log(WLR_DEBUG,
++		"Using Android gralloc staging bridge for %dx%d linux-dmabuf",
++		buffer->width,
++		buffer->height);
++
++	return &texture->wlr_texture;
++}
++
+ //
+ // wl_drm compat
+ // Reintroduced and reworked for 0.17.x from these reverted commits:
+@@ -333,7 +661,18 @@ static struct wlr_texture *android_texture_from_buffer(struct wlr_renderer *wlr_
+ 	if (wlr_android_wlegl_buffer_is_instance(wlr_buffer)) {
+ 		texture = gles2_texture_from_wl_drm(wlr_renderer, ((struct wlr_android_wlegl_buffer *)wlr_buffer)->inner.resource);
+ 	} else {
+-		texture = renderer->wlr_gles_renderer->impl->texture_from_buffer(renderer->wlr_gles_renderer, wlr_buffer);
++		struct wlr_dmabuf_attributes dmabuf;
++		if (renderer->dmabuf_staging &&
++				wlr_buffer_get_dmabuf(wlr_buffer, &dmabuf)) {
++			texture = android_texture_from_dmabuf_staging(
++				wlr_renderer, wlr_buffer, &dmabuf);
++			if (texture != NULL) {
++				return texture;
++			}
++		}
++
++		texture = renderer->wlr_gles_renderer->impl->texture_from_buffer(
++			renderer->wlr_gles_renderer, wlr_buffer);
+ 	}
+ 
+ 	return texture;
+@@ -438,6 +777,19 @@ struct wlr_renderer *wlr_android_renderer_create(void) {
+ 	wl_list_init(&renderer->buffers);
+ 	wlr_renderer_init(&renderer->wlr_renderer, &renderer_impl);
+ 	renderer->egl = egl;
++
++	const char *dmabuf_staging =
++		getenv("WLR_ANDROID_DMABUF_STAGING");
++
++	renderer->dmabuf_staging =
++		dmabuf_staging != NULL &&
++		strcmp(dmabuf_staging, "1") == 0;
++
++	if (renderer->dmabuf_staging) {
++		wlr_log(WLR_INFO,
++			"Android linux-dmabuf gralloc staging bridge enabled");
++	}
++
+ 	wlr_drm_format_set_add(&renderer->shm_formats, DRM_FORMAT_XRGB8888, DRM_FORMAT_MOD_LINEAR);
+ 	wlr_drm_format_set_add(&renderer->shm_formats, DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR);
+ 
+diff --git a/render/gles2/texture.c b/render/gles2/texture.c
+index 9f800ffa..e3ab3a9b 100644
+--- a/render/gles2/texture.c
++++ b/render/gles2/texture.c
+@@ -33,6 +33,10 @@ static bool gles2_texture_update_from_buffer(struct wlr_texture *wlr_texture,
+ 		struct wlr_buffer *buffer, const pixman_region32_t *damage) {
+ 	struct wlr_gles2_texture *texture = gles2_get_texture(wlr_texture);
+ 
++	if (texture->external_update != NULL) {
++		return texture->external_update(texture, buffer, damage);
++	}
++
+ 	if (texture->target != GL_TEXTURE_2D || texture->image != EGL_NO_IMAGE_KHR) {
+ 		return false;
+ 	}
+@@ -153,6 +157,10 @@ void gles2_texture_destroy(struct wlr_gles2_texture *texture) {
+ 
+ 	wlr_egl_restore_context(&prev_ctx);
+ 
++	if (texture->external_destroy != NULL) {
++		texture->external_destroy(texture);
++	}
++
+ 	free(texture);
+ }
+ 
