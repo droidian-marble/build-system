@@ -96,6 +96,7 @@ for project in "${!selected[@]}"; do
           architecture: $arch,
           image: ($project.image // $root.defaults.images[$arch]),
           runner: ($project.runner // $root.defaults.runners[$arch]),
+          container_options: ($project.container_options // ""),
           dependencies: [($project.dependencies[]?.project)],
           has_dependencies: (($project.dependencies // []) | length > 0)
         }
