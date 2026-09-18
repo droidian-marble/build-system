@@ -1,3 +1,5 @@
 .work/
 dist/
 *.zip
+.local-work/
+local-output/
