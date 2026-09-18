@@ -60,7 +60,7 @@
     },
     {
       "name": "initramfs-tools-halium",
-      "enabled": false,
+      "enabled": true,
       "repo": "https://github.com/droidian/initramfs-tools-halium.git",
       "branch": "droidian",
       "image": "quay.io/droidian/build-essential:current-arm64",
@@ -70,7 +70,7 @@
     },
     {
       "name": "linux-droidian-marble-gki",
-      "enabled": true,
+      "enabled": false,
       "repo": "https://github.com/droidian-marble/linux-droidian-marble-gki.git",
       "branch": "droidian",
       "architecture": "amd64",
@@ -101,16 +101,8 @@
         "linux-packaging-snippets",
         "clang-android-12.0-r416183b"
       ],
-      "build_command": "export PATH=\"/opt/android/prebuilts/python/2.7.5/bin:$PATH\"; debuild --no-lintian -F -d -sa --no-sign --jobs=\"$(nproc)\" -aarm64",
-      "dependencies": [
-        {
-          "project": "initramfs-tools-halium",
-          "packages": [
-            "initramfs-tools-halium",
-            "linux-initramfs-halium-generic"
-          ]
-        }
-      ]
+      "build_command": "RELENG_HOST_ARCH=arm64 releng-build-package",
+      "dependencies": []
     },
     {
       "name": "adaptation-xiaomi-marble",

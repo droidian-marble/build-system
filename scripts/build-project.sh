@@ -77,6 +77,16 @@ if [[ -d "$patch_dir" ]]; then
   fi
 fi
 
+cat > /etc/apt/sources.list.d/droidian-marble-build-system.list <<'EOF'
+deb [arch=arm64 trusted=yes] https://droidian-marble.github.io/build-system/ main main
+EOF
+
+cat > /etc/apt/preferences.d/droidian-marble-build-system.pref <<'EOF'
+Package: *:any
+Pin: origin "droidian-marble.github.io"
+Pin-Priority: 1001
+EOF
+
 apt-get update
 mapfile -t apt_packages < <(
   jq -r --arg name "$PROJECT" '
