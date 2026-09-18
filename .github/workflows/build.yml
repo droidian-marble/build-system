@@ -4,8 +4,8 @@ on:
   push:
     paths:
       - projects.json
-      - compose.yaml
       - patches/**
+      - project-scripts/**
       - scripts/**
       - .github/workflows/build.yml
   workflow_dispatch:
@@ -17,76 +17,420 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  matrix:
+  plan:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.projects.outputs.matrix }}
-      count: ${{ steps.projects.outputs.count }}
+      level0: ${{ steps.plan.outputs.level0 }}
+      level0_count: ${{ steps.plan.outputs.level0_count }}
+      level1: ${{ steps.plan.outputs.level1 }}
+      level1_count: ${{ steps.plan.outputs.level1_count }}
+      level2: ${{ steps.plan.outputs.level2 }}
+      level2_count: ${{ steps.plan.outputs.level2_count }}
+      level3: ${{ steps.plan.outputs.level3 }}
+      level3_count: ${{ steps.plan.outputs.level3_count }}
+      level4: ${{ steps.plan.outputs.level4 }}
+      level4_count: ${{ steps.plan.outputs.level4_count }}
+      level5: ${{ steps.plan.outputs.level5 }}
+      level5_count: ${{ steps.plan.outputs.level5_count }}
+      level6: ${{ steps.plan.outputs.level6 }}
+      level6_count: ${{ steps.plan.outputs.level6_count }}
+      level7: ${{ steps.plan.outputs.level7 }}
+      level7_count: ${{ steps.plan.outputs.level7_count }}
     steps:
       - uses: actions/checkout@v7
+
       - name: Validate configuration
         run: ./scripts/validate.sh
-      - id: projects
-        name: Generate dependency-aware targets
+
+      - id: plan
+        name: Generate dependency levels
         env:
           REQUESTED: ${{ inputs.projects || '' }}
         run: |
-          mapfile -t targets < <(./scripts/list-targets.sh "$REQUESTED")
-          matrix="$(printf '%s\n' "${targets[@]}" | jq -Rsc 'split("\n") | map(select(length > 0)) | {target: .}')"
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "count=${#targets[@]}" >> "$GITHUB_OUTPUT"
+          plan="$(./scripts/ci-plan.sh "$REQUESTED")"
+          for level in 0 1 2 3 4 5 6 7; do
+            entries="$(jq -c --argjson level "$level" '[.[] | select(.level == $level) | del(.level)]' <<< "$plan")"
+            count="$(jq 'length' <<< "$entries")"
+            matrix="$(jq -cn --argjson entries "$entries" '{include: $entries}')"
+            echo "level${level}=$matrix" >> "$GITHUB_OUTPUT"
+            echo "level${level}_count=$count" >> "$GITHUB_OUTPUT"
+          done
 
-  build:
-    needs: matrix
-    if: needs.matrix.outputs.count != '0'
-    runs-on: ubuntu-24.04-arm
+  build-level-0:
+    needs: plan
+    if: ${{ always() && needs.plan.outputs.level0_count != '0' }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.plan.outputs.level0) }}
+    name: Build ${{ matrix.name }} (${{ matrix.architecture }})
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.image }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
-      - name: Install host tools
-        run: sudo apt-get update && sudo apt-get install -y podman podman-compose jq
-      - name: Build ${{ matrix.target }} and dependencies
-        run: ./scripts/build.sh "${{ matrix.target }}"
-      - name: Upload produced packages
-        if: always()
+
+      - name: Verify container architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.architecture }}
+        run: |
+          actual="$(dpkg --print-architecture)"
+          test "$actual" = "$EXPECTED_ARCH"
+
+      - name: Build project
+        env:
+          DEPENDENCY_OUTPUT_ROOT: ${{ github.workspace }}/dependency-artifacts
+        run: ./scripts/build-project.sh "${{ matrix.name }}"
+
+      - name: Upload project artifacts
+        if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: partial-${{ matrix.target }}
-          path: dist/
-          if-no-files-found: ignore
+          name: project-${{ matrix.name }}
+          path: dist/${{ matrix.name }}/
+          if-no-files-found: error
           retention-days: 1
 
-  bundle:
-    needs: [matrix, build]
-    if: always() && needs.matrix.outputs.count != '0'
-    runs-on: ubuntu-latest
+  build-level-1:
+    needs: [plan, build-level-0]
+    if: ${{ always() && needs.plan.outputs.level1_count != '0' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.level1) }}
+    name: Build ${{ matrix.name }} (${{ matrix.architecture }})
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.image }}
+    defaults:
+      run:
+        shell: bash
     steps:
-      - name: Download produced packages
+      - uses: actions/checkout@v7
+
+      - name: Download dependency artifacts
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
-          pattern: partial-*
-          path: collected
-          merge-multiple: true
+          pattern: project-*
+          path: dependency-artifacts
 
-      - name: Create ZIP
-        id: zip
+      - name: Verify container architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.architecture }}
+        run: |
+          actual="$(dpkg --print-architecture)"
+          test "$actual" = "$EXPECTED_ARCH"
+
+      - name: Build project
+        env:
+          DEPENDENCY_OUTPUT_ROOT: ${{ github.workspace }}/dependency-artifacts
+        run: ./scripts/build-project.sh "${{ matrix.name }}"
+
+      - name: Upload project artifacts
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: project-${{ matrix.name }}
+          path: dist/${{ matrix.name }}/
+          if-no-files-found: error
+          retention-days: 1
+
+  build-level-2:
+    needs: [plan, build-level-1]
+    if: ${{ always() && needs.plan.outputs.level2_count != '0' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.level2) }}
+    name: Build ${{ matrix.name }} (${{ matrix.architecture }})
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.image }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download dependency artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: project-*
+          path: dependency-artifacts
+
+      - name: Verify container architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.architecture }}
+        run: |
+          actual="$(dpkg --print-architecture)"
+          test "$actual" = "$EXPECTED_ARCH"
+
+      - name: Build project
+        env:
+          DEPENDENCY_OUTPUT_ROOT: ${{ github.workspace }}/dependency-artifacts
+        run: ./scripts/build-project.sh "${{ matrix.name }}"
+
+      - name: Upload project artifacts
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: project-${{ matrix.name }}
+          path: dist/${{ matrix.name }}/
+          if-no-files-found: error
+          retention-days: 1
+
+  build-level-3:
+    needs: [plan, build-level-2]
+    if: ${{ always() && needs.plan.outputs.level3_count != '0' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.level3) }}
+    name: Build ${{ matrix.name }} (${{ matrix.architecture }})
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.image }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download dependency artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: project-*
+          path: dependency-artifacts
+
+      - name: Verify container architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.architecture }}
+        run: |
+          actual="$(dpkg --print-architecture)"
+          test "$actual" = "$EXPECTED_ARCH"
+
+      - name: Build project
+        env:
+          DEPENDENCY_OUTPUT_ROOT: ${{ github.workspace }}/dependency-artifacts
+        run: ./scripts/build-project.sh "${{ matrix.name }}"
+
+      - name: Upload project artifacts
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: project-${{ matrix.name }}
+          path: dist/${{ matrix.name }}/
+          if-no-files-found: error
+          retention-days: 1
+
+  build-level-4:
+    needs: [plan, build-level-3]
+    if: ${{ always() && needs.plan.outputs.level4_count != '0' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.level4) }}
+    name: Build ${{ matrix.name }} (${{ matrix.architecture }})
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.image }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download dependency artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: project-*
+          path: dependency-artifacts
+
+      - name: Verify container architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.architecture }}
+        run: |
+          actual="$(dpkg --print-architecture)"
+          test "$actual" = "$EXPECTED_ARCH"
+
+      - name: Build project
+        env:
+          DEPENDENCY_OUTPUT_ROOT: ${{ github.workspace }}/dependency-artifacts
+        run: ./scripts/build-project.sh "${{ matrix.name }}"
+
+      - name: Upload project artifacts
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: project-${{ matrix.name }}
+          path: dist/${{ matrix.name }}/
+          if-no-files-found: error
+          retention-days: 1
+
+  build-level-5:
+    needs: [plan, build-level-4]
+    if: ${{ always() && needs.plan.outputs.level5_count != '0' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.level5) }}
+    name: Build ${{ matrix.name }} (${{ matrix.architecture }})
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.image }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download dependency artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: project-*
+          path: dependency-artifacts
+
+      - name: Verify container architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.architecture }}
+        run: |
+          actual="$(dpkg --print-architecture)"
+          test "$actual" = "$EXPECTED_ARCH"
+
+      - name: Build project
+        env:
+          DEPENDENCY_OUTPUT_ROOT: ${{ github.workspace }}/dependency-artifacts
+        run: ./scripts/build-project.sh "${{ matrix.name }}"
+
+      - name: Upload project artifacts
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: project-${{ matrix.name }}
+          path: dist/${{ matrix.name }}/
+          if-no-files-found: error
+          retention-days: 1
+
+  build-level-6:
+    needs: [plan, build-level-5]
+    if: ${{ always() && needs.plan.outputs.level6_count != '0' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.level6) }}
+    name: Build ${{ matrix.name }} (${{ matrix.architecture }})
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.image }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download dependency artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: project-*
+          path: dependency-artifacts
+
+      - name: Verify container architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.architecture }}
+        run: |
+          actual="$(dpkg --print-architecture)"
+          test "$actual" = "$EXPECTED_ARCH"
+
+      - name: Build project
+        env:
+          DEPENDENCY_OUTPUT_ROOT: ${{ github.workspace }}/dependency-artifacts
+        run: ./scripts/build-project.sh "${{ matrix.name }}"
+
+      - name: Upload project artifacts
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: project-${{ matrix.name }}
+          path: dist/${{ matrix.name }}/
+          if-no-files-found: error
+          retention-days: 1
+
+  build-level-7:
+    needs: [plan, build-level-6]
+    if: ${{ always() && needs.plan.outputs.level7_count != '0' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.level7) }}
+    name: Build ${{ matrix.name }} (${{ matrix.architecture }})
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.image }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download dependency artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: project-*
+          path: dependency-artifacts
+
+      - name: Verify container architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.architecture }}
+        run: |
+          actual="$(dpkg --print-architecture)"
+          test "$actual" = "$EXPECTED_ARCH"
+
+      - name: Build project
+        env:
+          DEPENDENCY_OUTPUT_ROOT: ${{ github.workspace }}/dependency-artifacts
+        run: ./scripts/build-project.sh "${{ matrix.name }}"
+
+      - name: Upload project artifacts
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: project-${{ matrix.name }}
+          path: dist/${{ matrix.name }}/
+          if-no-files-found: error
+          retention-days: 1
+
+  bundle:
+    needs: [plan, build-level-0, build-level-1, build-level-2, build-level-3, build-level-4, build-level-5, build-level-6, build-level-7]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download successful project artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: project-*
+          path: collected
+
+      - id: bundle
+        name: Create final bundle
         run: |
           if [[ ! -d collected ]] || ! find collected -type f -print -quit | grep -q .; then
-            echo "No package artifacts were produced."
+            echo "No successful package artifacts were produced."
             echo "created=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
           mv collected droidian-packages-arm64
           zip -r droidian-packages-arm64.zip droidian-packages-arm64
           echo "created=true" >> "$GITHUB_OUTPUT"
 
       - name: Upload APT repository input
-        if: steps.zip.outputs.created == 'true'
+        if: steps.bundle.outputs.created == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: apt-repo-input
@@ -95,7 +439,7 @@ jobs:
           retention-days: 1
 
       - name: Upload final ZIP
-        if: steps.zip.outputs.created == 'true'
+        if: steps.bundle.outputs.created == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: droidian-packages-arm64

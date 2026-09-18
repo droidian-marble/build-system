@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+bootimage_package="$(
+  find "$PROJECT_BUILD_DIR" -maxdepth 1 -type f \
+    -name 'linux-bootimage-*-xiaomi-marble_*_arm64.deb' \
+    -print -quit
+)"
+
+if [[ -z "$bootimage_package" ]]; then
+  echo "linux-bootimage package for xiaomi-marble was not produced"
+  exit 1
+fi
+
+work_dir="$(mktemp -d)"
+trap 'rm -rf "$work_dir"' EXIT
+
+dpkg-deb -R "$bootimage_package" "$work_dir"
+rm -f "$work_dir"/boot/recovery.img-*-xiaomi-marble
+
+(
+  cd "$work_dir"
+  find . -type f -not -path './DEBIAN/*' -exec md5sum {} + \
+    | sort -k 2 \
+    | sed 's#  \./#  #'
+) > "$work_dir/DEBIAN/md5sums"
+
+rm -f "$bootimage_package"
+dpkg-deb -b "$work_dir" "$bootimage_package"
+
+echo "==> Repacked $(basename "$bootimage_package") without recovery image"

@@ -1,9 +1,18 @@
 {
   "defaults": {
-    "image": "quay.io/droidian/build-essential:next-arm64",
+    "architecture": "arm64",
+    "images": {
+      "arm64": "quay.io/droidian/build-essential:next-arm64",
+      "amd64": "quay.io/droidian/build-essential:current-amd64"
+    },
+    "runners": {
+      "arm64": "ubuntu-24.04-arm",
+      "amd64": "ubuntu-latest"
+    },
+    "build_command": "releng-build-package",
     "deb_build_options": "nocheck",
-    "deb_fullname": "Droidian Patch Builder",
-    "deb_email": "builder@localhost",
+    "deb_fullname": "Halhadus",
+    "deb_email": "eneshakans45@proton.me",
     "apt_packages": [
       "devscripts",
       "equivs",
@@ -19,7 +28,6 @@
       "apt_packages": [
         "android-headers-30"
       ],
-      "before_build": "",
       "dependencies": []
     },
     {
@@ -31,7 +39,6 @@
         "android-headers-30",
         "python3"
       ],
-      "before_build": "",
       "dependencies": [
         {
           "project": "libhybris",
@@ -49,6 +56,42 @@
           ]
         }
       ]
+    },
+    {
+      "name": "linux-droidian-marble-gki",
+      "enabled": true,
+      "repo": "https://github.com/droidian-marble/linux-droidian-marble-gki.git",
+      "branch": "droidian",
+      "architecture": "amd64",
+      "apt_packages": [
+        "curl",
+        "aria2",
+        "git",
+        "fakeroot",
+        "build-essential",
+        "ncurses-dev",
+        "xz-utils",
+        "libssl-dev",
+        "bc",
+        "flex",
+        "libelf-dev",
+        "bison",
+        "findutils",
+        "android-platform-prebuilts-python-linux-x86-2.7.5",
+        "rsync",
+        "kmod",
+        "cpio",
+        "avbtool",
+        "binutils-aarch64-linux-gnu",
+        "gcc-4.9-aarch64-linux-android",
+        "g++-4.9-aarch64-linux-android",
+        "libgcc-4.9-dev-aarch64-linux-android-cross",
+        "lz4",
+        "linux-packaging-snippets",
+        "clang-android-12.0-r416183b"
+      ],
+      "build_command": "export PATH=\"/opt/android/prebuilts/python/2.7.5/bin:$PATH\"; debuild --no-lintian -F -d -sa --no-sign --jobs=\"$(nproc)\" -aarm64",
+      "dependencies": []
     }
   ]
 }

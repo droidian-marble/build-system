@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+rm -f debian/control
+debian/rules debian/control
+
+source_package="$(awk 'NR == 1 { print $1 }' debian/changelog)"
+mk-build-deps \
+  --remove \
+  --install \
+  --tool "apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends --yes" \
+  debian/control
+
+rm -f "${source_package}"-build-deps_*.*
