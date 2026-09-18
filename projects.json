@@ -14,9 +14,11 @@
     "deb_fullname": "Halhadus",
     "deb_email": "eneshakans45@proton.me",
     "apt_packages": [
+      "build-essential",
       "devscripts",
       "equivs",
       "dpkg-dev",
+      "fakeroot",
       "jq"
     ]
   },
@@ -60,7 +62,7 @@
     },
     {
       "name": "initramfs-tools-halium",
-      "enabled": true,
+      "enabled": false,
       "repo": "https://github.com/droidian/initramfs-tools-halium.git",
       "branch": "droidian",
       "image": "quay.io/droidian/build-essential:current-arm64",
@@ -75,34 +77,18 @@
       "branch": "droidian",
       "architecture": "amd64",
       "apt_packages": [
-        "curl",
-        "aria2",
-        "git",
-        "fakeroot",
-        "build-essential",
-        "ncurses-dev",
-        "xz-utils",
-        "libssl-dev",
-        "bc",
-        "flex",
-        "libelf-dev",
-        "bison",
-        "findutils",
-        "android-platform-prebuilts-python-linux-x86-2.7.5",
-        "rsync",
-        "kmod",
-        "cpio",
-        "avbtool",
-        "binutils-aarch64-linux-gnu",
-        "gcc-4.9-aarch64-linux-android",
-        "g++-4.9-aarch64-linux-android",
-        "libgcc-4.9-dev-aarch64-linux-android-cross",
-        "lz4",
-        "linux-packaging-snippets",
-        "clang-android-12.0-r416183b"
+        "linux-packaging-snippets"
       ],
       "build_command": "RELENG_HOST_ARCH=arm64 releng-build-package",
-      "dependencies": []
+      "dependencies": [
+        {
+          "project": "initramfs-tools-halium",
+          "packages": [
+            "initramfs-tools-halium",
+            "linux-initramfs-halium-generic"
+          ]
+        }
+      ]
     },
     {
       "name": "adaptation-xiaomi-marble",
@@ -114,3 +100,4 @@
     }
   ]
 }
+
