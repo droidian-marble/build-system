@@ -2,11 +2,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG="$ROOT/projects.json"
 cd "$ROOT"
 ./scripts/validate.sh
 
 if (($# == 0)); then
-  mapfile -t requested < <(jq -r '.projects[] | select(.enabled) | .name' projects.json)
+  mapfile -t requested < <(jq -r '.projects[] | select(.enabled) | .name' "$CONFIG")
 else
   requested=("$@")
 fi
@@ -17,7 +18,7 @@ declare -a order
 deps_of() {
   jq -r --arg name "$1" \
     '.projects[] | select(.name == $name) | .dependencies[]?.project' \
-    projects.json
+    "$CONFIG"
 }
 
 visit() {
@@ -27,7 +28,7 @@ visit() {
     echo "Dependency cycle reached at: $project"
     exit 1
   }
-  jq -e --arg name "$project" '.projects[] | select(.name == $name)' projects.json >/dev/null || {
+  jq -e --arg name "$project" '.projects[] | select(.name == $name)' "$CONFIG" >/dev/null || {
     echo "Unknown project: $project"
     exit 1
   }
@@ -44,18 +45,34 @@ for project in "${requested[@]}"; do
 done
 
 actual_arch="$(dpkg --print-architecture)"
+declare -A selected_arches
 for project in "${order[@]}"; do
   expected_arch="$(
     jq -r --arg name "$project" '
       (.projects[] | select(.name == $name) | .architecture)
       // .defaults.architecture
       // "arm64"
-    ' projects.json
+    ' "$CONFIG"
   )"
-  if [[ "$expected_arch" != "$actual_arch" ]]; then
-    echo "Cannot build $project in this container: expected $expected_arch, got $actual_arch"
-    echo "Run that project inside its configured Droidian image instead."
+  selected_arches["$expected_arch"]=1
+done
+
+if ((${#selected_arches[@]} > 1)); then
+  echo "Selected projects require multiple build architectures:"
+  for arch in "${!selected_arches[@]}"; do
+    printf '  %s\n' "$arch"
+  done | sort
+  echo "Build architecture groups separately inside their configured environments."
+  exit 1
+fi
+
+for arch in "${!selected_arches[@]}"; do
+  if [[ "$arch" != "$actual_arch" ]]; then
+    echo "Cannot build selected projects in this container: expected $arch, got $actual_arch"
     exit 1
   fi
+done
+
+for project in "${order[@]}"; do
   DEPENDENCY_OUTPUT_ROOT="$ROOT/dist" ./scripts/build-project.sh "$project"
 done

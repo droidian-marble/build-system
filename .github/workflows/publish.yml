@@ -39,8 +39,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
-          artifact_id="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
-            --jq '.artifacts[] | select(.name == "apt-repo-input") | .id' | head -n1)"
+          artifact_id="$(gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100&name=apt-repo-input" \
+            --jq '.artifacts[] | select(.name == "apt-repo-input" and (.expired | not)) | .id' | head -n1)"
           if [[ -z "$artifact_id" ]]; then
             echo "No apt-repo-input artifact was produced; nothing to publish."
             echo "available=false" >> "$GITHUB_OUTPUT"
@@ -63,11 +63,13 @@ jobs:
         if: steps.artifact.outputs.available == 'true'
         run: |
           incoming="$RUNNER_TEMP/incoming-packages"
-          if find "$incoming" -type f -name '*.deb' -print -quit | grep -q .; then
+          published="$incoming/repo-meta/published-projects"
+          active="$incoming/repo-meta/active-projects"
+          if [[ -s "$published" && -s "$active" ]]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
             echo "path=$incoming" >> "$GITHUB_OUTPUT"
           else
-            echo "No .deb packages were found; nothing to publish."
+            echo "Repository metadata is missing or empty; nothing to publish."
             echo "publish=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -116,7 +118,7 @@ jobs:
           pages_dir="$RUNNER_TEMP/apt-repo-pages"
           mkdir -p "$pages_dir"
           cp -a "$APT_REPO_DIR"/. "$pages_dir"/
-          rm -f "$pages_dir/.git"
+          rm -rf "$pages_dir/.git" "$pages_dir/.repo-state"
           echo "path=$pages_dir" >> "$GITHUB_OUTPUT"
 
       - name: Configure GitHub Pages

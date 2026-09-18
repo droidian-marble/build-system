@@ -24,7 +24,10 @@ scripts/
 ├── build.sh
 ├── build-project.sh
 ├── ci-plan.sh
-└── validate.sh
+├── prepare-bundle.sh
+├── publish-apt-repo.sh
+├── validate.sh
+└── wait-for-dependencies.sh
 
 projects.json
 ```
@@ -52,7 +55,8 @@ projects.json
     "apt_packages": [
       "devscripts",
       "equivs",
-      "dpkg-dev"
+      "dpkg-dev",
+      "jq"
     ]
   },
   "projects": [
@@ -209,7 +213,7 @@ Declares packages that must be built before the project.
 
 The listed binary package names are installed from the dependency project's build output before the current project is built.
 
-Use an empty `packages` array to make all compatible `.deb` files from that dependency available:
+Use an empty `packages` array to install every `.deb` produced by that dependency:
 
 ```json
 "dependencies": [
@@ -278,7 +282,7 @@ A project does not need patches.
 
 ## Building
 
-Build all enabled projects:
+Build all enabled projects when their dependency closure uses one build architecture:
 
 ```bash
 ./scripts/build.sh
@@ -290,13 +294,13 @@ Build one project and its dependencies:
 ./scripts/build.sh application-example
 ```
 
-Build multiple projects:
+Build multiple projects that use the same build architecture:
 
 ```bash
 ./scripts/build.sh library-example application-example
 ```
 
-Local builds must run in an environment matching the configured architecture of every selected project.
+Local builds must run in an environment matching the configured architecture of the selected projects. If the selection contains multiple build architectures, build each architecture group separately.
 
 Build output is written to:
 
@@ -318,9 +322,9 @@ application-example
 library-example,application-example
 ```
 
-Dependencies are selected automatically and built before projects that require them.
+Dependencies are selected automatically and resolved before projects that require them are built.
 
-Each successful project produces an artifact named:
+Each successful project produces an intermediate artifact named:
 
 ```text
 project-<project-name>
@@ -332,4 +336,8 @@ The final bundle is published as:
 droidian-packages-arm64.zip
 ```
 
-The build workflow also produces `apt-repo-input`, which contains the `.deb` files consumed by the repository publishing workflow.
+Projects connected by dependencies are included in the final bundle only when the entire connected build component succeeds. Independent successful components are still included when another component fails.
+
+The build workflow also produces `apt-repo-input`, which contains the `.deb` files and repository metadata consumed by the repository publishing workflow.
+
+

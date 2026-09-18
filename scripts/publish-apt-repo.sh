@@ -6,27 +6,126 @@ REPO_DIR="${2:?usage: scripts/publish-apt-repo.sh <incoming-dir> <repository-dir
 SUITE="main"
 COMPONENT="main"
 MAX_VERSIONS=2
+STATE_DIR="$REPO_DIR/.repo-state/projects"
+META_DIR="$INCOMING_DIR/repo-meta"
+ACTIVE_PROJECTS_FILE="$META_DIR/active-projects"
+PUBLISHED_PROJECTS_FILE="$META_DIR/published-projects"
 
 for cmd in apt-ftparchive dpkg dpkg-deb gzip gpg; do
   command -v "$cmd" >/dev/null || { echo "Missing command: $cmd"; exit 1; }
 done
 
-mkdir -p "$REPO_DIR/pool" "$REPO_DIR/dists/$SUITE/$COMPONENT/binary-arm64"
+[[ -f "$ACTIVE_PROJECTS_FILE" ]] || {
+  echo "Missing repository metadata: repo-meta/active-projects"
+  exit 1
+}
+[[ -f "$PUBLISHED_PROJECTS_FILE" ]] || {
+  echo "Missing repository metadata: repo-meta/published-projects"
+  exit 1
+}
+
+mkdir -p "$REPO_DIR/pool" "$REPO_DIR/dists/$SUITE/$COMPONENT/binary-arm64" "$STATE_DIR"
 shopt -s nullglob
 
-incoming_debs=()
-while IFS= read -r -d '' deb; do
-  arch="$(dpkg-deb -f "$deb" Architecture)"
-  case "$arch" in
-    arm64|all) incoming_debs+=("$deb") ;;
-    *) echo "Skipping unsupported architecture: $(basename "$deb") [$arch]" ;;
-  esac
-done < <(find "$INCOMING_DIR" -type f -name '*.deb' -print0)
+mapfile -t active_projects < <(grep -Ev '^[[:space:]]*$' "$ACTIVE_PROJECTS_FILE" | sort -u)
+mapfile -t published_projects < <(grep -Ev '^[[:space:]]*$' "$PUBLISHED_PROJECTS_FILE" | sort -u)
 
-if ((${#incoming_debs[@]} == 0)); then
-  echo "No ARM64/all .deb packages found in $INCOMING_DIR"
-  exit 2
-fi
+for project in "${active_projects[@]}" "${published_projects[@]}"; do
+  [[ -z "$project" || "$project" =~ ^[A-Za-z0-9._-]+$ ]] || {
+    echo "Invalid project name in repository metadata: $project"
+    exit 1
+  }
+done
+
+is_active_project() {
+  local wanted="$1" project
+  for project in "${active_projects[@]}"; do
+    [[ "$project" == "$wanted" ]] && return 0
+  done
+  return 1
+}
+
+for project in "${published_projects[@]}"; do
+  is_active_project "$project" || {
+    echo "Published project is not present in active project metadata: $project"
+    exit 1
+  }
+done
+
+state_work="$(mktemp -d)"
+trap 'rm -rf "$state_work"' EXIT
+cp -a "$STATE_DIR"/. "$state_work"/ 2>/dev/null || true
+
+incoming_debs=()
+for project in "${published_projects[@]}"; do
+  project_dir="$INCOMING_DIR/$project"
+  project_packages=()
+
+  if [[ -d "$project_dir" ]]; then
+    while IFS= read -r -d '' deb; do
+      arch="$(dpkg-deb -f "$deb" Architecture)"
+      case "$arch" in
+        arm64|all)
+          incoming_debs+=("$deb")
+          project_packages+=("$(dpkg-deb -f "$deb" Package)")
+          ;;
+        *)
+          echo "Skipping unsupported architecture: $(basename "$deb") [$arch]"
+          ;;
+      esac
+    done < <(find "$project_dir" -type f -name '*.deb' -print0)
+  fi
+
+  if ((${#project_packages[@]})); then
+    printf '%s\n' "${project_packages[@]}" | sort -u > "$state_work/$project.packages"
+  else
+    : > "$state_work/$project.packages"
+  fi
+done
+
+for manifest in "$state_work"/*.packages; do
+  [[ -e "$manifest" ]] || continue
+  project="$(basename "$manifest" .packages)"
+  if ! is_active_project "$project"; then
+    rm -f "$manifest"
+  fi
+done
+
+old_claims="$(mktemp)"
+new_claims="$(mktemp)"
+trap 'rm -rf "$state_work"; rm -f "$old_claims" "$new_claims"' EXIT
+
+collect_claims() {
+  local dir="$1" output="$2" manifest
+  : > "$output"
+  for manifest in "$dir"/*.packages; do
+    [[ -e "$manifest" ]] || continue
+    grep -Ev '^[[:space:]]*$' "$manifest" >> "$output" || true
+  done
+  if [[ -s "$output" ]]; then
+    sort -u "$output" -o "$output"
+  fi
+}
+
+collect_claims "$STATE_DIR" "$old_claims"
+collect_claims "$state_work" "$new_claims"
+
+while IFS= read -r package; do
+  [[ -n "$package" ]] || continue
+  if ! grep -Fxq "$package" "$new_claims"; then
+    for deb in "$REPO_DIR"/pool/*.deb; do
+      [[ -e "$deb" ]] || continue
+      if [[ "$(dpkg-deb -f "$deb" Package)" == "$package" ]]; then
+        echo "Removing unowned package: $package ($(basename "$deb"))"
+        rm -f "$deb"
+      fi
+    done
+  fi
+done < "$old_claims"
+
+rm -rf "$STATE_DIR"
+mkdir -p "$STATE_DIR"
+cp -a "$state_work"/. "$STATE_DIR"/
 
 for deb in "${incoming_debs[@]}"; do
   cp -f "$deb" "$REPO_DIR/pool/$(basename "$deb")"
@@ -109,7 +208,7 @@ if [[ -n "${APT_REPO_GPG_PRIVATE_KEY:-}" ]]; then
   gnupg_home="$(mktemp -d)"
   chmod 700 "$gnupg_home"
   export GNUPGHOME="$gnupg_home"
-  trap 'rm -rf "$gnupg_home"' EXIT
+  trap 'rm -rf "$state_work"; rm -f "$old_claims" "$new_claims"; rm -rf "$gnupg_home"' EXIT
 
   printf '%s' "$APT_REPO_GPG_PRIVATE_KEY" | gpg --batch --import
   fingerprint="$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "fpr" { print $10; exit }')"

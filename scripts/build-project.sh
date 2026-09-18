@@ -2,11 +2,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG="$ROOT/projects.json"
 PROJECT="${1:?usage: scripts/build-project.sh <project>}"
 DEPENDENCY_OUTPUT_ROOT="${DEPENDENCY_OUTPUT_ROOT:-$ROOT/dist}"
 cd "$ROOT"
 
-for cmd in jq git dpkg dpkg-deb apt-get base64; do
+for cmd in jq git dpkg dpkg-deb apt-get; do
   command -v "$cmd" >/dev/null || {
     echo "Missing command: $cmd"
     exit 1
@@ -14,7 +15,7 @@ for cmd in jq git dpkg dpkg-deb apt-get base64; do
 done
 
 project_exists() {
-  jq -e --arg name "$PROJECT" '.projects[] | select(.name == $name)' projects.json >/dev/null
+  jq -e --arg name "$PROJECT" '.projects[] | select(.name == $name)' "$CONFIG" >/dev/null
 }
 project_exists || {
   echo "Unknown project: $PROJECT"
@@ -22,7 +23,7 @@ project_exists || {
 }
 
 value() {
-  jq -r --arg name "$PROJECT" "$1" projects.json
+  jq -r --arg name "$PROJECT" "$1" "$CONFIG"
 }
 
 PROJECT_ARCHITECTURE="$(value '(.projects[] | select(.name == $name) | .architecture) // .defaults.architecture // "arm64"')"
@@ -39,6 +40,10 @@ export DEB_BUILD_OPTIONS="$(value '(.projects[] | select(.name == $name) | .deb_
 export DEBFULLNAME="$(value '(.projects[] | select(.name == $name) | .deb_fullname) // .defaults.deb_fullname // "Droidian Patch Builder"')"
 export DEBEMAIL="$(value '(.projects[] | select(.name == $name) | .deb_email) // .defaults.deb_email // "builder@localhost"')"
 export RELENG_FULL_BUILD=yes
+
+if [[ "${GITHUB_ACTIONS:-}" == "true" || -e /.dockerenv || -e /run/.containerenv ]]; then
+  export IS_CONTAINER=true
+fi
 
 PROJECT_WORK_DIR="$ROOT/.work/$PROJECT"
 export PROJECT_SOURCE_DIR="$PROJECT_WORK_DIR/source"
@@ -80,7 +85,7 @@ mapfile -t apt_packages < <(
       (.projects[] | select(.name == $name) | .apt_packages[]?)
     ]
     | unique[]
-  ' "$ROOT/projects.json"
+  ' "$CONFIG"
 )
 if ((${#apt_packages[@]})); then
   apt-get install -y --no-install-recommends "${apt_packages[@]}"
@@ -106,29 +111,28 @@ while IFS=$'\t' read -r dep_project dep_packages || [[ -n "$dep_project" ]]; do
   }
 
   mapfile -t dep_debs < <(find "$dep_dir" -type f -name '*.deb' -print | sort)
+  if ((${#dep_debs[@]} == 0)); then
+    echo "Dependency artifact contains no .deb packages: $PROJECT -> $dep_project"
+    exit 1
+  fi
+
   if [[ -n "${dep_packages:-}" ]]; then
     IFS=',' read -r -a wanted_packages <<< "$dep_packages"
     for wanted in "${wanted_packages[@]}"; do
       found=""
       for deb in "${dep_debs[@]}"; do
         [[ "$(dpkg-deb -f "$deb" Package)" == "$wanted" ]] || continue
-        arch="$(dpkg-deb -f "$deb" Architecture)"
-        if [[ "$arch" == "$actual_arch" || "$arch" == all ]]; then
-          found="$deb"
-          break
-        fi
+        found="$deb"
+        break
       done
       [[ -n "$found" ]] || {
-        echo "Missing compatible dependency package: $dep_project -> $wanted [$actual_arch/all]"
+        echo "Missing dependency package: $dep_project -> $wanted"
         exit 1
       }
       dependency_debs+=("$found")
     done
   else
-    for deb in "${dep_debs[@]}"; do
-      arch="$(dpkg-deb -f "$deb" Architecture)"
-      [[ "$arch" == "$actual_arch" || "$arch" == all ]] && dependency_debs+=("$deb")
-    done
+    dependency_debs+=("${dep_debs[@]}")
   fi
 done < <(
   jq -r --arg name "$PROJECT" '
@@ -137,7 +141,7 @@ done < <(
     | .dependencies[]?
     | [.project, ((.packages // []) | join(","))]
     | @tsv
-  ' "$ROOT/projects.json"
+  ' "$CONFIG"
 )
 
 if ((${#dependency_debs[@]})); then
@@ -161,10 +165,9 @@ run_project_script before
 
 build_command="$(value '(.projects[] | select(.name == $name) | .build_command) // .defaults.build_command // "releng-build-package"')"
 echo "==> Building $PROJECT"
-echo "    command: $build_command"
 (
   cd "$PROJECT_SOURCE_DIR"
-  /bin/bash -c "$build_command"
+  /bin/bash -e -o pipefail -c "$build_command"
 )
 
 run_project_script after

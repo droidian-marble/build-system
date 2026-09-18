@@ -112,10 +112,39 @@ for phase in before after; do
 done
 
 if [[ -d patches ]]; then
+  while IFS= read -r patch_dir; do
+    project="$(basename "$patch_dir")"
+    [[ ${exists[$project]:-0} == 1 ]] || {
+      echo "Unknown project patch directory: $patch_dir"
+      exit 1
+    }
+
+    declare -A patch_sequences=()
+    while IFS= read -r patch; do
+      base="$(basename "$patch")"
+      [[ "$base" =~ ^([0-9]{4})-.+\.patch$ ]] || {
+        echo "Invalid active patch name: $patch (expected 0001-description.patch)"
+        exit 1
+      }
+      sequence="${BASH_REMATCH[1]}"
+      [[ -z "${patch_sequences[$sequence]+x}" ]] || {
+        echo "Duplicate patch sequence for $project: $sequence"
+        exit 1
+      }
+      patch_sequences["$sequence"]="$base"
+    done < <(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' -print | sort -V)
+  done < <(find patches -mindepth 1 -maxdepth 1 -type d -print | sort)
+
   while IFS= read -r patch; do
-    base="$(basename "$patch")"
-    [[ "$base" =~ ^[0-9]{4}-.+\.patch$ ]] || {
-      echo "Invalid active patch name: $patch (expected 0001-description.patch)"
+    relative="${patch#patches/}"
+    project="${relative%%/*}"
+    remainder="${relative#*/}"
+    [[ "$remainder" != */* ]] || {
+      echo "Nested active patch is not supported: $patch"
+      exit 1
+    }
+    [[ ${exists[$project]:-0} == 1 ]] || {
+      echo "Unknown project patch: $patch"
       exit 1
     }
   done < <(find patches -type f -name '*.patch' -print | sort -V)

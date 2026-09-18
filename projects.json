@@ -16,7 +16,8 @@
     "apt_packages": [
       "devscripts",
       "equivs",
-      "dpkg-dev"
+      "dpkg-dev",
+      "jq"
     ]
   },
   "projects": [
