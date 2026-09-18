@@ -25,7 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout triggering revision
         uses: actions/checkout@v7
@@ -120,18 +119,3 @@ jobs:
           cp -a "$APT_REPO_DIR"/. "$pages_dir"/
           rm -rf "$pages_dir/.git" "$pages_dir/.repo-state"
           echo "path=$pages_dir" >> "$GITHUB_OUTPUT"
-
-      - name: Configure GitHub Pages
-        if: steps.packages.outputs.publish == 'true'
-        uses: actions/configure-pages@v5
-
-      - name: Upload GitHub Pages artifact
-        if: steps.packages.outputs.publish == 'true'
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: ${{ steps.pages.outputs.path }}
-
-      - name: Deploy APT repository to GitHub Pages
-        if: steps.packages.outputs.publish == 'true'
-        id: deployment
-        uses: actions/deploy-pages@v4
