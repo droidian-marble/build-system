@@ -84,7 +84,7 @@ EOF
 cat > /etc/apt/preferences.d/droidian-marble-build-system.pref <<'EOF'
 Package: *:any
 Pin: origin "droidian-marble.github.io"
-Pin-Priority: 1001
+Pin-Priority: 1003
 EOF
 
 apt-get update

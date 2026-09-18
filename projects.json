@@ -65,7 +65,7 @@
       "enabled": false,
       "repo": "https://github.com/droidian/initramfs-tools-halium.git",
       "branch": "droidian",
-      "image": "quay.io/droidian/build-essential:current-arm64",
+      "architecture": "amd64",
       "apt_packages": [],
       "dependencies": [],
       "container_options": "--privileged"
@@ -100,4 +100,3 @@
     }
   ]
 }
-
