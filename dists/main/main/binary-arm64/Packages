@@ -210,28 +210,6 @@ X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: initramfs-tools-halium
 Architecture: all
-Version: 2025.04.11.0+git20260918143617.d037055.droidian
-Priority: optional
-Section: utils
-Maintainer: Eugenio Paolantonio (g7) <me@medesimo.eu>
-Original-Maintainer: Halium developers <admin@halium.org>
-Installed-Size: 57
-Depends: initramfs-tools, coreutils, busybox-static, e2fsprogs
-Filename: pool/initramfs-tools-halium_2025.04.11.0+git20260918143617.d037055.droidian_all.deb
-Size: 13584
-MD5sum: 394862e6ee4e646894ecbb1e4bb072fb
-SHA1: 71161ff6fed595a8575a1ad4f960d739a11e7ede
-SHA256: 98ae5e896fce623772e4b4a753aaf504d0f6ea0f4396165707e39bcf3e034524
-SHA512: 72e2fc6e4a2371209ccc9fbab86f1be3f6ae04a638b094eb4b26d30c3f10515729095c7e51d6e7b4cb175d25a7d5767d2cdd36e4820412a534dd8a7d7a4fb07e
-Description: tools for mounting a Droidian rootfs
- This package contains the scripts to boot a Droidian device.
- It also ships a default fstab that uses the android device paths based
- on partition label
-X-Droidian-Vcs-Revision: d037055fd92758fa2289a334ca32fd2bacfe8230
-X-Droidian-Vcs-Url: https://github.com/droidian/initramfs-tools-halium.git
-
-Package: initramfs-tools-halium
-Architecture: all
 Version: 2025.04.11.0+git20260918144858.5a2d173.droidian
 Priority: optional
 Section: utils
@@ -250,6 +228,28 @@ Description: tools for mounting a Droidian rootfs
  It also ships a default fstab that uses the android device paths based
  on partition label
 X-Droidian-Vcs-Revision: 5a2d17349917925d2137f167f6814e61daaba10d
+X-Droidian-Vcs-Url: https://github.com/droidian/initramfs-tools-halium.git
+
+Package: initramfs-tools-halium
+Architecture: all
+Version: 2025.04.11.0+git20260918174438.29e75f2.droidian
+Priority: optional
+Section: utils
+Maintainer: Eugenio Paolantonio (g7) <me@medesimo.eu>
+Original-Maintainer: Halium developers <admin@halium.org>
+Installed-Size: 57
+Depends: initramfs-tools, coreutils, busybox-static, e2fsprogs
+Filename: pool/initramfs-tools-halium_2025.04.11.0+git20260918174438.29e75f2.droidian_all.deb
+Size: 13584
+MD5sum: a338209fcb42d469bc94dedb31cb1d9a
+SHA1: 0fb5e1b072b388319bc94f5758c7176c58624640
+SHA256: 238a955a3d059f34529c0afd1cc8c002b82befad8a74fc50d0ed35afab9bdf6d
+SHA512: bf08ff3940526fc6ae46c0ac054166ea2327debe06ad8f0a5a8920f1ae5d4246bddcbe872c9279421dace10c3e5bb78e7ba7e3628caa5c2ee4cbc0ee38953e18
+Description: tools for mounting a Droidian rootfs
+ This package contains the scripts to boot a Droidian device.
+ It also ships a default fstab that uses the android device paths based
+ on partition label
+X-Droidian-Vcs-Revision: 29e75f2acf6a8d944ec38ad1a5e49d54eef7533e
 X-Droidian-Vcs-Url: https://github.com/droidian/initramfs-tools-halium.git
 
 Package: libandroid-properties-dev
@@ -1355,11 +1355,11 @@ Installed-Size: 80565
 Pre-Depends: flash-bootimage (>= 4)
 Depends: linux-image-5.10.236-xiaomi-marble (= 0.0.1+git20260918162419.27e5e96.droidian)
 Filename: pool/linux-bootimage-5.10.236-xiaomi-marble_0.0.1+git20260918162419.27e5e96.droidian_arm64.deb
-Size: 13144740
-MD5sum: a6b81d6260e33e8dc53efbc49834b411
-SHA1: 424dc582f99cfa11dbd762639c361afbac7d0f56
-SHA256: bf6196d2b6330f31cb5ed7506d311a1b5f7c65a32039d5e1c7ad06479f8704d5
-SHA512: 5338ef1ab9a4da8a1fd29167458c045ffcb2448add2f278d89a8a3922a66929acb01c06490cbf622d29d8caadecd89b6a937b68e290206248e48743c6f43a60c
+Size: 13141140
+MD5sum: 8f2725f4a08e7d3054ee29efff24184c
+SHA1: 78852c81ac19193ce4a7cf7900bf2ffd10145ef5
+SHA256: 88081c7c281506c381c405dc89eb65fd1d8857423c0a77e971c9750b440cb3f2
+SHA512: a565edee214be9461170d0841dc30b4c83fe23d99e6b4432ce28741fa1bb94bbaffb4fe7700ed2bd15d7a54c7e5a075b4ed5170ad02599ed88fe0c30c1485476
 Description: Linux kernel for POCO F5 - Android Boot Image
  This package contains the Linux kernel for the POCO F5 device.
  .
@@ -1438,11 +1438,11 @@ Maintainer: Droidian porters <info@droidian.org>
 Installed-Size: 57752
 Depends: linux-image-5.10.236-xiaomi-marble (= 0.0.1+git20260918162419.27e5e96.droidian)
 Filename: pool/linux-headers-5.10.236-xiaomi-marble_0.0.1+git20260918162419.27e5e96.droidian_arm64.deb
-Size: 9211336
-MD5sum: 9107231ae5971c17b84a6ec1e748ce29
-SHA1: fe986cab7e19892f1b86432584e0d50716e58492
-SHA256: 68ef07617ef35691e9e284666b65161da72cb63b96164c21899a2eb3538d0609
-SHA512: e7ff2f206b0f85bdeadc76c7c00996623eb014ce8246dec6b0e1f9ce9ea322a9c69c2c93bd96871f7b82546d3b500698c12052a8ba420bc6939fe41c67b889f7
+Size: 9211356
+MD5sum: 438c8697af5e848e7e33819e5b5f7db7
+SHA1: 66ba0dd3980aa141fda5f5261698298925d09177
+SHA256: b41bb6cbf7fcb1d43293bee35378e9cccbb64dae6649dc18f28ee62a3a902ac6
+SHA512: be10653553caf176426236e90446df91f1a82f00ad285b1fbd867061bf9bd18cd2fee85f63e9c933339f95c3c819481c816ea3f97ce80705f3b86bd1f8db3441
 Description: Linux kernel for POCO F5 - Headers
  This package contains the Linux kernel headers for the POCO F5 device.
 X-Droidian-Vcs-Revision: 27e5e96e8fe6c79b7283bba5546ee03a6f619bd8
@@ -1513,11 +1513,11 @@ Source: linux-android-xiaomi-marble
 Maintainer: Droidian porters <info@droidian.org>
 Installed-Size: 50199
 Filename: pool/linux-image-5.10.236-xiaomi-marble_0.0.1+git20260918162419.27e5e96.droidian_arm64.deb
-Size: 14360476
-MD5sum: e3dcb5b53f4e1062b06194582927ffce
-SHA1: 55b8182e51e99cac914cd947bf9006a377d3d3d5
-SHA256: 240afb5518f1c3ecabcf4f8d53da04871b8dd862adca8b1883ec7414cb1131a5
-SHA512: 97fa43a64967f4367540535574311def0b9b936ca6543c68a51b31a45dc4deda4ca2285a43b6a9903161fbd88924472da51f3fb3144cb082736cffd5bd352a1f
+Size: 14361752
+MD5sum: c92406b30338a55fbe98ca17677e0b4b
+SHA1: c74ec708eeda5fc1a4d55e5b865e318b07f4244f
+SHA256: a31ef878fda9691b2a3942af553b36ce3284021be2be25429f8697c17994aa2e
+SHA512: 3e0fd8d264d1f3c9f2cc53dd524aaf2f69d93702b26cb4986959aca041057ffa0a28426bb834e37b3a258b8c4286053f9acd439c469cfcda9bfa0bf297364cf4
 Description: Linux kernel for POCO F5
  This package contains the Linux kernel for the POCO F5 device.
  .
@@ -1585,56 +1585,4 @@ SHA256: e9a3a7349a680e2424eb04b44d691c8ddcf2e69614787d0eaa79c00eaf894384
 SHA512: 50242f737e348c49b12b4424bd2ae26ab395cfdef179d7d3182e9bd2000099e4a5a91f482e0bbebe59ce75d1988d60374604d1d8b4f25f216b6a94fad4f2a9eb
 Description: Linux kernel for POCO F5 (latest)
  This package depends to the latest kernel image available for the POCO F5.
-
-Package: linux-initramfs-halium-generic
-Architecture: arm64
-Version: 2025.04.11.0+git20260918143617.d037055.droidian
-Multi-Arch: same
-Priority: optional
-Section: utils
-Source: initramfs-tools-halium
-Maintainer: Eugenio Paolantonio (g7) <me@medesimo.eu>
-Original-Maintainer: Halium developers <admin@halium.org>
-Installed-Size: 75984
-Filename: pool/linux-initramfs-halium-generic_2025.04.11.0+git20260918143617.d037055.droidian_arm64.deb
-Size: 66377088
-MD5sum: ecb4fbc121b9b118c43413798b8a164e
-SHA1: b41033fe00cb88f7a4139970100965d9d81bff26
-SHA256: 08849e4d51fba36b8cc3f9c786cefa4ad26ebb3a7a551e2dc265850500e25c50
-SHA512: 58d0f03774841cbe3b119f089143d2cb7060007d75d008fe4a2e0a0e3018aceebb2c8e06cde0f5880d167d5b5f5fdd427b74d0b95bad751051439ff88aabc8e4
-Description: pre-built generic initramfs image for halium ports
- This package contains a pre-built initramfs image for halium
- ports.
- .
- Note: this package will only put the initramfs image in-place,
- it's the responsibility of build systems to do something meaningful
- with it.
-X-Droidian-Vcs-Revision: d037055fd92758fa2289a334ca32fd2bacfe8230
-X-Droidian-Vcs-Url: https://github.com/droidian/initramfs-tools-halium.git
-
-Package: linux-initramfs-halium-generic
-Architecture: arm64
-Version: 2025.04.11.0+git20260918144858.5a2d173.droidian
-Multi-Arch: same
-Priority: optional
-Section: utils
-Source: initramfs-tools-halium
-Maintainer: Eugenio Paolantonio (g7) <me@medesimo.eu>
-Original-Maintainer: Halium developers <admin@halium.org>
-Installed-Size: 75985
-Filename: pool/linux-initramfs-halium-generic_2025.04.11.0+git20260918144858.5a2d173.droidian_arm64.deb
-Size: 66386596
-MD5sum: 64524c2ac6002ab8934bc6038a5c1abe
-SHA1: d71a68ed237f04d3bd7861527878ca1099dfe3d2
-SHA256: 556fe194d38fa16ae2ce6478bbc4fae367a9fd326398b55b1d8a837293c72aa9
-SHA512: 653e860c5c194903abb1d5a7a9a1823cd61370fd128e8453e297ed24b359293e2eafe22c81fbf9310ee3594df95284bf39a894f1fea294ea3618018243ef139d
-Description: pre-built generic initramfs image for halium ports
- This package contains a pre-built initramfs image for halium
- ports.
- .
- Note: this package will only put the initramfs image in-place,
- it's the responsibility of build systems to do something meaningful
- with it.
-X-Droidian-Vcs-Revision: 5a2d17349917925d2137f167f6814e61daaba10d
-X-Droidian-Vcs-Url: https://github.com/droidian/initramfs-tools-halium.git
 
