@@ -1,0 +1,36 @@
+From 2ba0b4d90350dfa97dc54e94133966b6dd44ed10 Mon Sep 17 00:00:00 2001
+From: Halhadus <eneshakans45@proton.me>
+Date: Sat, 19 Sep 2026 21:45:11 +0300
+Subject: [PATCH] mount-android: fall back to dynamic partition mapper paths
+
+---
+ usr/sbin/mount-android.sh | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/usr/sbin/mount-android.sh b/usr/sbin/mount-android.sh
+index 9d06b08..108550f 100755
+--- a/usr/sbin/mount-android.sh
++++ b/usr/sbin/mount-android.sh
+@@ -25,6 +25,19 @@ find_partition_path() {
+             break
+         fi
+     done
++
++    if [ ! -e "$path" ]; then
++        if [ -e "/dev/mapper/dynpart-$label$ab_slot_suffix" ]; then
++            path="/dev/mapper/dynpart-$label$ab_slot_suffix"
++        elif [ -e "/dev/mapper/dynpart-$label" ]; then
++            path="/dev/mapper/dynpart-$label"
++        elif [ -e "/dev/mapper/dynpart-${label}_a" ]; then
++            path="/dev/mapper/dynpart-${label}_a"
++        elif [ -e "/dev/mapper/dynpart-${label}_b" ]; then
++            path="/dev/mapper/dynpart-${label}_b"
++        fi
++    fi
++
+     echo $path
+ }
+ 
+-- 
+2.55.0
+

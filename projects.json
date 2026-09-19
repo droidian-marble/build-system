@@ -79,6 +79,14 @@
       "branch": "droidian",
       "apt_packages": [],
       "dependencies": []
+    },
+    {
+      "name": "lxc-android",
+      "enabled": true,
+      "repo": "https://github.com/droidian/lxc-android.git",
+      "branch": "droidian",
+      "apt_packages": [],
+      "dependencies": []
     }
   ]
 }
