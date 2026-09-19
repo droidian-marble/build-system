@@ -1326,25 +1326,27 @@ X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki
 
 Package: linux-bootimage-5.10.236-xiaomi-marble
 Architecture: arm64
-Version: 0.0.1
+Version: 0.0.1+git20260918183344.fe9c3b3.droidian
 Priority: optional
 Section: kernel
 Source: linux-android-xiaomi-marble
 Maintainer: Droidian porters <info@droidian.org>
-Installed-Size: 118893
+Installed-Size: 80565
 Pre-Depends: flash-bootimage (>= 4)
-Depends: linux-image-5.10.236-xiaomi-marble (= 0.0.1)
-Filename: pool/linux-bootimage-5.10.236-xiaomi-marble_0.0.1_arm64.deb
-Size: 28840188
-MD5sum: de39d580d14826933c3910182e8e43be
-SHA1: 9861712260cef2e2c82b6ae98961a9ffa3b38fa8
-SHA256: 805ce534a5e44fddb308648c2a599428fc49e541ab7e96b785a50b3f7578a3a0
-SHA512: c0064ce204dfeb6732e73f8e1189b714c1f7a15ed25c38f79672ff7f185b4c5f9164fa4ff78cf0b85ce7ab42ec377884534de5351b280a3b138bed3fed7562bc
+Depends: linux-image-5.10.236-xiaomi-marble (= 0.0.1+git20260918183344.fe9c3b3.droidian)
+Filename: pool/linux-bootimage-5.10.236-xiaomi-marble_0.0.1+git20260918183344.fe9c3b3.droidian_arm64.deb
+Size: 13137376
+MD5sum: fa13461216a7f4637edbf8ed25024f94
+SHA1: 0cc73b1d182bb21f5c66e392ca8c019089b716c4
+SHA256: 6150ea43ca5fa613d538fd8a3cbe351a3382d9a84ec7a54ed5691fee83e1b1ea
+SHA512: 6acc03c2933dae8155e16d301190a5dc9aeee5563032fd1a74119151630865feec684d6b0ab6fe67954f23a44a2e45eed5e9ebb334a219b3dd8c1c57bf7856fe
 Description: Linux kernel for POCO F5 - Android Boot Image
  This package contains the Linux kernel for the POCO F5 device.
  .
  Note: This package ships an Android Boot Image bundled with Halium's
  initramfs.
+X-Droidian-Vcs-Revision: fe9c3b352428bcd4c51ee1e92d6ef1ca1d76e3de
+X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki.git
 
 Package: linux-bootimage-xiaomi-marble
 Architecture: arm64
@@ -1368,21 +1370,23 @@ X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki
 
 Package: linux-bootimage-xiaomi-marble
 Architecture: arm64
-Version: 0.0.1
+Version: 0.0.1+git20260918183344.fe9c3b3.droidian
 Priority: optional
 Section: kernel
 Source: linux-android-xiaomi-marble
 Maintainer: Droidian porters <info@droidian.org>
 Installed-Size: 9
-Depends: linux-bootimage-5.10.236-xiaomi-marble (= 0.0.1)
-Filename: pool/linux-bootimage-xiaomi-marble_0.0.1_arm64.deb
-Size: 1884
-MD5sum: 7d5fa2d425307ef3a69c65e7cb1f3201
-SHA1: 3efbd1309251bc4717f13dc6a19224332010bfdf
-SHA256: 3957b1ffd370fe97bf6602fbe4058ced322e45ca31ee97eff5e4662fb0a78ed1
-SHA512: 233825d13c52bee0ad3c1fb253f54e2c37e0713994fcc2f724d449cc4e1e21becaf4b1d3a2e7c7f081586f1a747e37d7b8b2b54af2c40d0fef2b8e9a80092310
+Depends: linux-bootimage-5.10.236-xiaomi-marble (= 0.0.1+git20260918183344.fe9c3b3.droidian)
+Filename: pool/linux-bootimage-xiaomi-marble_0.0.1+git20260918183344.fe9c3b3.droidian_arm64.deb
+Size: 2000
+MD5sum: cf0e63170280497a5da724f0a8d3899a
+SHA1: 447c2215d582461eb91b534d70b1f20191104f4d
+SHA256: eec2dba701ed00ec507f61e1eb18f26662471e18faa6ec06ac0d9209307dc523
+SHA512: b4df495c20c4973f46d4f795bb0a75294f20b5734d1e6eab0d8fe8a02485aac1104b1d623fc9e82fd823afa0d913e273fb0c576231576be64a51f3c00ca36d2a
 Description: Linux kernel for POCO F5 - Android Boot Image  (latest)
  This package depends to the latest kernel bootimage available for the POCO F5.
+X-Droidian-Vcs-Revision: fe9c3b352428bcd4c51ee1e92d6ef1ca1d76e3de
+X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki.git
 
 Package: linux-headers-5.10.236-xiaomi-marble
 Architecture: arm64
@@ -1406,21 +1410,23 @@ X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki
 
 Package: linux-headers-5.10.236-xiaomi-marble
 Architecture: arm64
-Version: 0.0.1
+Version: 0.0.1+git20260918183344.fe9c3b3.droidian
 Priority: optional
 Section: kernel
 Source: linux-android-xiaomi-marble
 Maintainer: Droidian porters <info@droidian.org>
 Installed-Size: 57752
-Depends: linux-image-5.10.236-xiaomi-marble (= 0.0.1)
-Filename: pool/linux-headers-5.10.236-xiaomi-marble_0.0.1_arm64.deb
-Size: 9211216
-MD5sum: 42a17bccaf60acad73c7c08189d9bdb7
-SHA1: 91750ca66cdf990604e6fa6d46c65e74723f5314
-SHA256: 466d8d5603202fca52ff77257bb392a8dcaa3ac08006c35ba10c980ed50ee551
-SHA512: 7ca75a69ead7c8663ded355e1dc8192840e9439188b6dd4ffa86ec0a414076649aa2f637aa416e46f41219987bc92eccc42795e3714b675a850e6acb604eaee7
+Depends: linux-image-5.10.236-xiaomi-marble (= 0.0.1+git20260918183344.fe9c3b3.droidian)
+Filename: pool/linux-headers-5.10.236-xiaomi-marble_0.0.1+git20260918183344.fe9c3b3.droidian_arm64.deb
+Size: 9211568
+MD5sum: b9403dc06a05d5f33f59816d845b7667
+SHA1: 8546bb6d07af4d737d9a87be260771842030484e
+SHA256: 0588c034bda591ea3e71b8f49710c16c51fc618f235894763a92d32921cf876b
+SHA512: 9fd7f11c73b8d94912aff1520dd09dcf672eb3cb44a05adfef29023ae3ff7a0086be7f2a29cd9b2211d81ce99d8be8e4ab66ad933f607c9db4900a12c8a88dce
 Description: Linux kernel for POCO F5 - Headers
  This package contains the Linux kernel headers for the POCO F5 device.
+X-Droidian-Vcs-Revision: fe9c3b352428bcd4c51ee1e92d6ef1ca1d76e3de
+X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki.git
 
 Package: linux-headers-xiaomi-marble
 Architecture: arm64
@@ -1444,21 +1450,23 @@ X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki
 
 Package: linux-headers-xiaomi-marble
 Architecture: arm64
-Version: 0.0.1
+Version: 0.0.1+git20260918183344.fe9c3b3.droidian
 Priority: optional
 Section: kernel
 Source: linux-android-xiaomi-marble
 Maintainer: Droidian porters <info@droidian.org>
 Installed-Size: 9
-Depends: linux-headers-5.10.236-xiaomi-marble (= 0.0.1)
-Filename: pool/linux-headers-xiaomi-marble_0.0.1_arm64.deb
-Size: 1872
-MD5sum: cfe2bc330923c44bd13f42e55fecfc12
-SHA1: 66b221918fd0fb09eb8047cada08ee8ce97a0275
-SHA256: 3826c41b735c7c8df7cb36e5c5c6c943125385b4909e25b8af755d889277e64c
-SHA512: 04a666f78832ea82ea88abe82c55f51adbb9cad17b97b721d28e288a38d30d580692f1c827defbe4bf1e4ccf6cc4bb1a5ed9cf2790cb18daf0db23260685d0e5
+Depends: linux-headers-5.10.236-xiaomi-marble (= 0.0.1+git20260918183344.fe9c3b3.droidian)
+Filename: pool/linux-headers-xiaomi-marble_0.0.1+git20260918183344.fe9c3b3.droidian_arm64.deb
+Size: 1992
+MD5sum: 1374ae5f9ec42150bb0c5ae8b0f7a0be
+SHA1: 2b726459c6a572fbc2d2d66642c048465fc27faa
+SHA256: e174b63782881ad2e88978a0e365ecfd51e4f53169b53c9996373fdeac7658ca
+SHA512: c883bca897df5312a0fb531a4d211508330098581499b89813c58708b81b8f59c5c14bb370360ea3afd5cd2107e7831b1789096f51236d2395df703a4da99fb1
 Description: Linux kernel for POCO F5 - Headers (latest)
  This package depends to the latest kernel headers available for the POCO F5.
+X-Droidian-Vcs-Revision: fe9c3b352428bcd4c51ee1e92d6ef1ca1d76e3de
+X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki.git
 
 Package: linux-image-5.10.236-xiaomi-marble
 Architecture: arm64
@@ -1485,24 +1493,26 @@ X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki
 
 Package: linux-image-5.10.236-xiaomi-marble
 Architecture: arm64
-Version: 0.0.1
+Version: 0.0.1+git20260918183344.fe9c3b3.droidian
 Priority: optional
 Section: kernel
 Source: linux-android-xiaomi-marble
 Maintainer: Droidian porters <info@droidian.org>
 Installed-Size: 50199
-Filename: pool/linux-image-5.10.236-xiaomi-marble_0.0.1_arm64.deb
-Size: 14363892
-MD5sum: bcf486554bba0b2c5795d5598ac42020
-SHA1: 1d00a76899c9619bbae95ef65871d7e79816dda7
-SHA256: e8d69bde811d0a919e53ee4ffe720d755bbd2fde5919e9ff28d1a55131412b60
-SHA512: 5d1480d0d81531b6054aaf7d4af439e4ab9f27a7c0005ddddfa352f41752cb9ea6b4633c3b361025ba721832232ea67f9bef5baf06cd7a02bfa85d45b139c1e3
+Filename: pool/linux-image-5.10.236-xiaomi-marble_0.0.1+git20260918183344.fe9c3b3.droidian_arm64.deb
+Size: 14363504
+MD5sum: cfe4351d8505cca96f7eb64a37483c95
+SHA1: 59f271dd6c5562c29674273568eaf49d8e3b0964
+SHA256: d1aa2d67fa24bf9b3f83881b92cae034c10b5fdabca0dfee1d784554a44837d0
+SHA512: 19caf19e515f4b682fdb8d0a549f4ae765668715ee05925e902156ba73f9882deebeeae3190d148b104daf574fe4a469fdc49523dccadfe4b4afac400dcdea9a
 Description: Linux kernel for POCO F5
  This package contains the Linux kernel for the POCO F5 device.
  .
  Note: This package only ships the kernel image and modules, you should probably
  look at the linux-bootimage-5.10.236-xiaomi-marble package for a bootimage suitable
  for Android boot loaders.
+X-Droidian-Vcs-Revision: fe9c3b352428bcd4c51ee1e92d6ef1ca1d76e3de
+X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki.git
 
 Package: linux-image-xiaomi-marble
 Architecture: arm64
@@ -1526,19 +1536,21 @@ X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki
 
 Package: linux-image-xiaomi-marble
 Architecture: arm64
-Version: 0.0.1
+Version: 0.0.1+git20260918183344.fe9c3b3.droidian
 Priority: optional
 Section: kernel
 Source: linux-android-xiaomi-marble
 Maintainer: Droidian porters <info@droidian.org>
 Installed-Size: 9
-Depends: linux-image-5.10.236-xiaomi-marble (= 0.0.1)
-Filename: pool/linux-image-xiaomi-marble_0.0.1_arm64.deb
-Size: 1860
-MD5sum: 2ed2c2a21dab40ad044a49b92677fa37
-SHA1: f7cb9a1d2cd57f014048edb2a4e92e972cb73a72
-SHA256: e9a3a7349a680e2424eb04b44d691c8ddcf2e69614787d0eaa79c00eaf894384
-SHA512: 50242f737e348c49b12b4424bd2ae26ab395cfdef179d7d3182e9bd2000099e4a5a91f482e0bbebe59ce75d1988d60374604d1d8b4f25f216b6a94fad4f2a9eb
+Depends: linux-image-5.10.236-xiaomi-marble (= 0.0.1+git20260918183344.fe9c3b3.droidian)
+Filename: pool/linux-image-xiaomi-marble_0.0.1+git20260918183344.fe9c3b3.droidian_arm64.deb
+Size: 1980
+MD5sum: 5c0615d891a88662304d3ad4bf90cce0
+SHA1: 434aa0e86fda3ba9a28205cb89b7367eac53669a
+SHA256: 8c3d2efc311c14b414b3de99d747a08733974f005f1bfd8ada2d6e79862fa548
+SHA512: 10bc6e9de8605f20b668a59217a92f500fc3680d5a3dbf0e39986e7a399686fc6ad6e13831cb66f43d605bc07eb30462adaa422518ee757bbedbf0a955bb9be9
 Description: Linux kernel for POCO F5 (latest)
  This package depends to the latest kernel image available for the POCO F5.
+X-Droidian-Vcs-Revision: fe9c3b352428bcd4c51ee1e92d6ef1ca1d76e3de
+X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki.git
 
