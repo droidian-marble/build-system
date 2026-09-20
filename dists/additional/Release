@@ -1,24 +1,24 @@
 Architectures: arm64
 Codename: additional
 Components: main
-Date: Sun, 20 Sep 2026 21:45:03 +0000
+Date: Sun, 20 Sep 2026 23:34:13 +0000
 Description: Droidian ARM64 package repository (additional)
 Label: Droidian Patch Builder
 Origin: Droidian Patch Builder
 Suite: additional
 MD5Sum:
- 052beb5ba7c483118fe3087356411d94              236 Release
- ad4e7d98dad86741895b599eba49091d            34381 main/binary-arm64/Packages
- bbdc1a78477056b97c718268b47a15e8             8907 main/binary-arm64/Packages.gz
+ 680f4bd60542e0c945fa7d79f0863c18              236 Release
+ d8717603f6271fac037d98e8b1698f33            68762 main/binary-arm64/Packages
+ dcb860d76b910cf623653a69ecb9d28c            14206 main/binary-arm64/Packages.gz
 SHA1:
- c8990f6bd64aeafba6181569e533794051252c17              236 Release
- 1582cd65e3b0ac90ef754511616cf8148bb0b4f9            34381 main/binary-arm64/Packages
- 116ac1e31157c9d70247d0755ab7de8ad87417b6             8907 main/binary-arm64/Packages.gz
+ d3a60b997e6056646ef54e0abc945bb31df674ec              236 Release
+ 77828ca4b963fc56197a1c3d6ca3e08b60d161c1            68762 main/binary-arm64/Packages
+ d9974bd093a4040bbdd834c3c03b7fd377dd255b            14206 main/binary-arm64/Packages.gz
 SHA256:
- 1c65c99184819c01abf79bca7be5b7f1c5c916f88615b8fcf195e122e02d62d2              236 Release
- b8533047127a01382a0e5bce6d4dec7287a5e859de9f798a971bb4b8f41a0ef7            34381 main/binary-arm64/Packages
- 0132c117b04af67121ccd11b284ee907a4153461ee7b1e775875687c7bac2c1c             8907 main/binary-arm64/Packages.gz
+ 53c9995a6edb14d4c2a09c4023b2fe9b15b8593a65adce943fe38bdc58e732f0              236 Release
+ 1937837b8a332379707aa6ee380d5082b22f8e3c5cfb5740f8f2b7bb196b0e1b            68762 main/binary-arm64/Packages
+ 8964c41969a8e30624983ee5a5ae2d5ec7d46f5a43515fafe16b22e5352908e7            14206 main/binary-arm64/Packages.gz
 SHA512:
- b9ded2b8c8ffbf313620bd76f198d9fd1f4b27f7ddf32f4de2f7226319ffefc443993464795ea4c266ca35f5b8d4337b4e35d9a7bc2afb09e263deba3d0481c2              236 Release
- de4d7ff3b3b12ec782bcf2f1f74a848cfffc22d8773ec69b1a044d10b0642b33e8043f0e261b1d8c0da0821880a2eb0d9a4e34cbc88deef9e7eff86bf995a139            34381 main/binary-arm64/Packages
- ff4a10a0029eb0ad5d86520ac7bb2c841e2d17a8da3d4bdf5465fdd809c8c984c636724d3593d6315d6b86dd12daf920e2d7803cbdfe2d0c533035b83fd6a250             8907 main/binary-arm64/Packages.gz
+ 327491d4c00e9c9c7b3917f7fa0c3c381f482a7cff6b94a474e122ebf6cf31604a72841c23ad3bbbb38100b01458eaea9cfd8134c6dbc3814096b0009a9784ea              236 Release
+ b40b80ecc7bdc617d38da248409e0238f3dc5a85b90848fc744ee7185664d97df5ec566a3a26787719f8f1b6f46e36f98a098f20867d3f419d109af7608a8310            68762 main/binary-arm64/Packages
+ d54c3d7d2bf0f517ff4e95eb6f5b044d1c164b8bacef20c9f5d60cd2f9710fcefda9f1803b92c17ae065a6181f989c8a1252b82e92dd8c015fef09c357036e6f            14206 main/binary-arm64/Packages.gz
