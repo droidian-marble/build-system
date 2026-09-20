@@ -3,7 +3,14 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="$ROOT/projects.json"
-PROJECT="${1:?usage: scripts/build-project.sh <project>}"
+PROJECT="${1:?usage: scripts/build-project.sh <project> [--additional]}"
+ADDITIONAL=false
+if [[ "${2:-}" == "--additional" ]]; then
+  ADDITIONAL=true
+elif [[ -n "${2:-}" ]]; then
+  echo "usage: scripts/build-project.sh <project> [--additional]"
+  exit 2
+fi
 DEPENDENCY_OUTPUT_ROOT="${DEPENDENCY_OUTPUT_ROOT:-$ROOT/dist}"
 cd "$ROOT"
 
@@ -34,6 +41,8 @@ if [[ "$actual_arch" != "$PROJECT_ARCHITECTURE" ]]; then
 fi
 
 export PROJECT_NAME="$PROJECT"
+export PROJECT_ADDITIONAL="$ADDITIONAL"
+export PROJECT_VARIANT="$($ADDITIONAL && printf 'additional' || printf 'base')"
 export PROJECT_REPO="$(value '.projects[] | select(.name == $name) | .repo')"
 export PROJECT_BRANCH="$(value '.projects[] | select(.name == $name) | .branch')"
 export DEB_BUILD_OPTIONS="$(value '(.projects[] | select(.name == $name) | .deb_build_options) // .defaults.deb_build_options // "nocheck"')"
@@ -45,15 +54,16 @@ if [[ "${GITHUB_ACTIONS:-}" == "true" || -e /.dockerenv || -e /run/.containerenv
   export IS_CONTAINER=true
 fi
 
-PROJECT_WORK_DIR="$ROOT/.work/$PROJECT"
+PROJECT_WORK_DIR="$ROOT/.work/$PROJECT/$PROJECT_VARIANT"
 export PROJECT_SOURCE_DIR="$PROJECT_WORK_DIR/source"
 export PROJECT_BUILD_DIR="$PROJECT_WORK_DIR"
-export PROJECT_OUTPUT_DIR="$ROOT/dist/$PROJECT"
+export PROJECT_OUTPUT_DIR="$ROOT/dist/$PROJECT/$PROJECT_VARIANT"
 
 rm -rf "$PROJECT_WORK_DIR" "$PROJECT_OUTPUT_DIR"
 mkdir -p "$PROJECT_SOURCE_DIR" "$PROJECT_OUTPUT_DIR"
 
 echo "==> $PROJECT"
+$ADDITIONAL && echo "    variant: additional"
 echo "    repository: $PROJECT_REPO"
 echo "    branch: $PROJECT_BRANCH"
 
@@ -61,31 +71,52 @@ git clone --branch "$PROJECT_BRANCH" --single-branch "$PROJECT_REPO" "$PROJECT_S
 cd "$PROJECT_SOURCE_DIR"
 git submodule update --init --recursive
 
-patch_dir="$ROOT/patches/$PROJECT"
-if [[ -d "$patch_dir" ]]; then
+patches_applied=false
+apply_patch_dir() {
+  local patch_dir="$1" patch
+  [[ -d "$patch_dir" ]] || return 0
   shopt -s nullglob
-  patches=("$patch_dir"/[0-9][0-9][0-9][0-9]-*.patch)
-  if ((${#patches[@]})); then
-    mapfile -t patches < <(printf '%s\n' "${patches[@]}" | sort -V)
-    for patch in "${patches[@]}"; do
-      echo "==> Applying $(basename "$patch")"
-      git apply --check "$patch"
-      git apply --index "$patch"
-    done
-    git -c user.name="$DEBFULLNAME" -c user.email="$DEBEMAIL" \
-      commit -m "build: apply local $PROJECT patches"
-  fi
+  local patches=("$patch_dir"/[0-9][0-9][0-9][0-9]-*.patch)
+  ((${#patches[@]})) || return 0
+  mapfile -t patches < <(printf '%s\n' "${patches[@]}" | sort -V)
+  for patch in "${patches[@]}"; do
+    echo "==> Applying $(basename "$patch")"
+    git apply --check "$patch"
+    git apply --index "$patch"
+    patches_applied=true
+  done
+}
+
+apply_patch_dir "$ROOT/patches/$PROJECT"
+$ADDITIONAL && apply_patch_dir "$ROOT/patches-additional/$PROJECT"
+if $patches_applied; then
+  git -c user.name="$DEBFULLNAME" -c user.email="$DEBEMAIL" commit -m "build: apply local $PROJECT patches"
 fi
 
-cat > /etc/apt/sources.list.d/droidian-marble-build-system.list <<'EOF'
+if $ADDITIONAL; then
+  cat > /etc/apt/sources.list.d/droidian-marble-build-system.list <<'EOF_APT'
+deb [arch=arm64 trusted=yes] https://droidian-marble.github.io/build-system/ additional main
 deb [arch=arm64 trusted=yes] https://droidian-marble.github.io/build-system/ main main
-EOF
+EOF_APT
+else
+  cat > /etc/apt/sources.list.d/droidian-marble-build-system.list <<'EOF_APT'
+deb [arch=arm64 trusted=yes] https://droidian-marble.github.io/build-system/ main main
+EOF_APT
+fi
 
-cat > /etc/apt/preferences.d/droidian-marble-build-system.pref <<'EOF'
+cat > /etc/apt/preferences.d/droidian-marble-build-system.pref <<'EOF_PREF'
 Package: *:any
 Pin: origin "droidian-marble.github.io"
 Pin-Priority: 1003
-EOF
+EOF_PREF
+if $ADDITIONAL; then
+  cat >> /etc/apt/preferences.d/droidian-marble-build-system.pref <<'EOF_PREF'
+
+Package: *:any
+Pin: release n=additional
+Pin-Priority: 1004
+EOF_PREF
+fi
 
 apt-get update
 mapfile -t apt_packages < <(
@@ -102,13 +133,17 @@ if ((${#apt_packages[@]})); then
 fi
 
 dependency_debs=()
-while IFS=$'\t' read -r dep_project dep_packages || [[ -n "$dep_project" ]]; do
+while IFS=$'\t' read -r dep_project dep_additional dep_packages || [[ -n "$dep_project" ]]; do
   [[ -n "$dep_project" ]] || continue
+  dep_artifact="project-$dep_project"
+  dep_variant="base"
+  if [[ "$dep_additional" == true ]]; then
+    dep_artifact+="-additional"
+    dep_variant="additional"
+  fi
 
   dep_dir=""
-  for candidate in \
-    "$DEPENDENCY_OUTPUT_ROOT/project-$dep_project" \
-    "$DEPENDENCY_OUTPUT_ROOT/$dep_project"; do
+  for candidate in "$DEPENDENCY_OUTPUT_ROOT/$dep_artifact" "$DEPENDENCY_OUTPUT_ROOT/$dep_project/$dep_variant"; do
     if [[ -d "$candidate" ]]; then
       dep_dir="$candidate"
       break
@@ -116,13 +151,13 @@ while IFS=$'\t' read -r dep_project dep_packages || [[ -n "$dep_project" ]]; do
   done
 
   [[ -n "$dep_dir" ]] || {
-    echo "Missing dependency artifact: $PROJECT -> $dep_project"
+    echo "Missing dependency artifact: $PROJECT -> $dep_project [$dep_variant]"
     exit 1
   }
 
   mapfile -t dep_debs < <(find "$dep_dir" -type f -name '*.deb' -print | sort)
   if ((${#dep_debs[@]} == 0)); then
-    echo "Dependency artifact contains no .deb packages: $PROJECT -> $dep_project"
+    echo "Dependency artifact contains no .deb packages: $PROJECT -> $dep_project [$dep_variant]"
     exit 1
   fi
 
@@ -136,7 +171,7 @@ while IFS=$'\t' read -r dep_project dep_packages || [[ -n "$dep_project" ]]; do
         break
       done
       [[ -n "$found" ]] || {
-        echo "Missing dependency package: $dep_project -> $wanted"
+        echo "Missing dependency package: $dep_project [$dep_variant] -> $wanted"
         exit 1
       }
       dependency_debs+=("$found")
@@ -145,11 +180,18 @@ while IFS=$'\t' read -r dep_project dep_packages || [[ -n "$dep_project" ]]; do
     dependency_debs+=("${dep_debs[@]}")
   fi
 done < <(
-  jq -r --arg name "$PROJECT" '
-    .projects[]
-    | select(.name == $name)
-    | .dependencies[]?
-    | [.project, ((.packages // []) | join(","))]
+  jq -r --arg name "$PROJECT" --argjson additional "$ADDITIONAL" '
+    def dependencies_for($project; $additional):
+      if $additional then
+        ($project["dependencies-additional"] // []) as $overrides
+        | ($overrides | map(.project)) as $override_projects
+        | ([($project.dependencies // [])[] | select(.project as $dep | ($override_projects | index($dep)) == null)] + $overrides)
+      else
+        ($project.dependencies // [])
+      end;
+    (.projects[] | select(.name == $name)) as $project
+    | dependencies_for($project; $additional)[]?
+    | [.project, ((.additional // false) | tostring), ((.packages // []) | join(","))]
     | @tsv
   ' "$CONFIG"
 )
@@ -160,27 +202,35 @@ if ((${#dependency_debs[@]})); then
   apt-get install -y --no-install-recommends "${dependency_debs[@]}"
 fi
 
-run_project_script() {
-  local phase="$1"
-  local script="$ROOT/project-scripts/$phase/$PROJECT"
+run_script_from() {
+  local root="$1" phase="$2"
+  local script="$root/$phase/$PROJECT"
   [[ -f "$script" ]] || return 0
-  echo "==> Running $phase script"
+  echo "==> Running $phase script: ${script#$ROOT/}"
   (
     cd "$PROJECT_SOURCE_DIR"
     /bin/bash "$script"
   )
 }
 
-run_project_script before
+run_project_scripts() {
+  local phase="$1"
+  run_script_from "$ROOT/project-scripts" "$phase"
+  if $ADDITIONAL; then
+    run_script_from "$ROOT/project-scripts-additional" "$phase"
+  fi
+}
+
+run_project_scripts before
 
 build_command="$(value '(.projects[] | select(.name == $name) | .build_command) // .defaults.build_command // "releng-build-package"')"
-echo "==> Building $PROJECT"
+echo "==> Building $PROJECT [$PROJECT_VARIANT]"
 (
   cd "$PROJECT_SOURCE_DIR"
   /bin/bash -e -o pipefail -c "$build_command"
 )
 
-run_project_script after
+run_project_scripts after
 
 echo "==> Collecting artifacts"
 shopt -s nullglob
@@ -193,7 +243,13 @@ artifacts=(
   "$PROJECT_BUILD_DIR"/*.tar.*
 )
 if ((${#artifacts[@]} == 0)); then
-  echo "No package artifacts were produced for $PROJECT"
+  echo "No package artifacts were produced for $PROJECT [$PROJECT_VARIANT]"
+  exit 1
+fi
+
+debs=("$PROJECT_BUILD_DIR"/*.deb)
+if ((${#debs[@]} == 0)); then
+  echo "No .deb packages were produced for $PROJECT [$PROJECT_VARIANT]"
   exit 1
 fi
 

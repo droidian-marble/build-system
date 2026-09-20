@@ -12,85 +12,80 @@ API_VERSION="2026-03-10"
 API_URL="${GITHUB_API_URL:-https://api.github.com}"
 PACKAGE_DIR="$ROOT/droidian-packages-arm64"
 APT_INPUT_DIR="$ROOT/apt-repo-input"
-INDEX_FILE="$(mktemp)"
 TMP_DIR="$(mktemp -d)"
-trap 'rm -f "$INDEX_FILE"; rm -rf "$TMP_DIR"' EXIT
+INDEX_FILE="$TMP_DIR/artifacts.tsv"
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 for cmd in curl jq unzip zip; do
-  command -v "$cmd" >/dev/null || {
-    echo "Missing command: $cmd"
-    exit 1
-  }
+  command -v "$cmd" >/dev/null || { echo "Missing command: $cmd"; exit 1; }
 done
 
-jq -e '
-  type == "object"
-  and (.include | type == "array")
-  and all(.include[];
-    (.name | type == "string" and length > 0) and
-    ((.dependencies // []) | type == "array")
-  )
-' <<< "$MATRIX_JSON" >/dev/null
-
-api_get() {
-  curl \
-    --fail \
-    --silent \
-    --show-error \
-    --retry 3 \
-    --retry-delay 2 \
-    -H "Accept: application/vnd.github+json" \
-    -H "Authorization: Bearer $GH_TOKEN" \
-    -H "X-GitHub-Api-Version: $API_VERSION" \
-    "$API_URL$1"
-}
-
+: > "$INDEX_FILE"
 page=1
 while :; do
   response="$(
-    api_get "/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100&page=$page"
+    curl \
+      --fail \
+      --silent \
+      --show-error \
+      --retry 3 \
+      --retry-delay 2 \
+      -H "Accept: application/vnd.github+json" \
+      -H "Authorization: Bearer $GH_TOKEN" \
+      -H "X-GitHub-Api-Version: $API_VERSION" \
+      "$API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100&page=$page"
   )"
-
-  jq -r '
-    .artifacts[]
-    | select(.expired | not)
-    | [.name, (.id | tostring)]
-    | @tsv
-  ' <<< "$response" >> "$INDEX_FILE"
-
+  jq -r '.artifacts[] | select(.expired | not) | [.name, .id] | @tsv' <<< "$response" >> "$INDEX_FILE"
   count="$(jq '.artifacts | length' <<< "$response")"
   (( count == 100 )) || break
   ((page++))
 done
 
-mapfile -t selected < <(jq -r '.include[].name' <<< "$MATRIX_JSON")
-if ((${#selected[@]} == 0)); then
+node_key() {
+  printf '%s|%s\n' "$1" "$2"
+}
+
+artifact_name() {
+  printf 'project-%s' "$1"
+  [[ "$2" == true ]] && printf '%s' '-additional'
+  printf '\n'
+}
+
+mapfile -t selected_rows < <(jq -r '.include[] | [.name, (.additional | tostring)] | @tsv' <<< "$MATRIX_JSON")
+if ((${#selected_rows[@]} == 0)); then
   echo "created=false" >> "$GITHUB_OUTPUT"
   exit 0
 fi
 
-declare -A artifact_ids adjacency visited publishable
-for project in "${selected[@]}"; do
-  artifact_ids["$project"]="$(
-    awk -F '\t' -v name="project-$project" '$1 == name { id=$2 } END { print id }' "$INDEX_FILE"
-  )"
-  adjacency["$project"]=""
+declare -A artifact_ids adjacency visited publishable node_project node_additional
+selected_keys=()
+for row in "${selected_rows[@]}"; do
+  IFS=$'\t' read -r project additional <<< "$row"
+  key="$(node_key "$project" "$additional")"
+  selected_keys+=("$key")
+  node_project["$key"]="$project"
+  node_additional["$key"]="$additional"
+  name="$(artifact_name "$project" "$additional")"
+  artifact_ids["$key"]="$(awk -F '\t' -v name="$name" '$1 == name { id=$2 } END { print id }' "$INDEX_FILE")"
+  adjacency["$key"]=""
 done
 
-while IFS=$'\t' read -r project dependency; do
+while IFS=$'\t' read -r project additional dependency dep_additional; do
   [[ -n "$project" && -n "$dependency" ]] || continue
-  adjacency["$project"]+=" $dependency"
-  adjacency["$dependency"]+=" $project"
+  key="$(node_key "$project" "$additional")"
+  dep_key="$(node_key "$dependency" "$dep_additional")"
+  adjacency["$key"]+=" $dep_key"
+  adjacency["$dep_key"]+=" $key"
 done < <(
   jq -r '
     .include[] as $project
     | ($project.dependencies // [])[]?
-    | [$project.name, .]
+    | [$project.name, ($project.additional | tostring), .name, ((.additional // false) | tostring)]
     | @tsv
   ' <<< "$MATRIX_JSON"
 )
 
-for root in "${selected[@]}"; do
+for root in "${selected_keys[@]}"; do
   [[ ${visited[$root]:-0} == 1 ]] && continue
 
   component=()
@@ -99,52 +94,63 @@ for root in "${selected[@]}"; do
 
   while ((${#stack[@]})); do
     last=$(( ${#stack[@]} - 1 ))
-    project="${stack[$last]}"
+    key="${stack[$last]}"
     unset 'stack[$last]'
 
-    [[ ${visited[$project]:-0} == 1 ]] && continue
-    visited["$project"]=1
-    component+=("$project")
+    [[ ${visited[$key]:-0} == 1 ]] && continue
+    visited["$key"]=1
+    component+=("$key")
 
-    if [[ -z "${artifact_ids[$project]:-}" ]]; then
+    if [[ -z "${artifact_ids[$key]:-}" ]]; then
       clean=false
     fi
 
-    for neighbor in ${adjacency[$project]:-}; do
+    for neighbor in ${adjacency[$key]:-}; do
       [[ ${visited[$neighbor]:-0} == 1 ]] || stack+=("$neighbor")
     done
   done
 
   if $clean; then
-    for project in "${component[@]}"; do
-      publishable["$project"]=1
+    for key in "${component[@]}"; do
+      publishable["$key"]=1
     done
   else
     printf 'Skipping failed dependency component:'
-    printf ' %s' "${component[@]}"
+    for key in "${component[@]}"; do
+      project="${node_project[$key]}"
+      additional="${node_additional[$key]}"
+      printf ' %s' "$project"
+      [[ "$additional" == true ]] && printf '%s' '[additional]'
+    done
     printf '\n'
   fi
 done
 
 rm -rf "$PACKAGE_DIR" "$APT_INPUT_DIR" "$ROOT/droidian-packages-arm64.zip"
-mkdir -p "$PACKAGE_DIR" "$APT_INPUT_DIR/repo-meta"
+mkdir -p "$PACKAGE_DIR" "$APT_INPUT_DIR/main/repo-meta" "$APT_INPUT_DIR/additional/repo-meta"
 
-mapfile -t publishable_projects < <(
-  for project in "${selected[@]}"; do
-    [[ ${publishable[$project]:-0} == 1 ]] && printf '%s\n' "$project"
-  done | sort
-)
+publishable_keys=()
+for key in "${selected_keys[@]}"; do
+  [[ ${publishable[$key]:-0} == 1 ]] && publishable_keys+=("$key")
+done
 
-if ((${#publishable_projects[@]} == 0)); then
+if ((${#publishable_keys[@]} == 0)); then
   rm -rf "$PACKAGE_DIR" "$APT_INPUT_DIR"
   echo "created=false" >> "$GITHUB_OUTPUT"
   exit 0
 fi
 
-for project in "${publishable_projects[@]}"; do
-  artifact_id="${artifact_ids[$project]}"
-  archive="$TMP_DIR/$project.zip"
+for key in "${publishable_keys[@]}"; do
+  project="${node_project[$key]}"
+  additional="${node_additional[$key]}"
+  artifact_id="${artifact_ids[$key]}"
+  archive="$TMP_DIR/$(artifact_name "$project" "$additional").zip"
+  component="main"
   destination="$PACKAGE_DIR/$project"
+  if [[ "$additional" == true ]]; then
+    component="additional"
+    destination="$PACKAGE_DIR/additional/$project"
+  fi
 
   mkdir -p "$destination"
   curl \
@@ -161,14 +167,27 @@ for project in "${publishable_projects[@]}"; do
     --output "$archive"
   unzip -q "$archive" -d "$destination"
 
-  mkdir -p "$APT_INPUT_DIR/$project"
+  mkdir -p "$APT_INPUT_DIR/$component/$project"
   while IFS= read -r -d '' deb; do
-    cp -a "$deb" "$APT_INPUT_DIR/$project/"
+    cp -a "$deb" "$APT_INPUT_DIR/$component/$project/"
   done < <(find "$destination" -type f -name '*.deb' -print0)
 done
 
-jq -r '.projects[].name' "$CONFIG" | sort -u > "$APT_INPUT_DIR/repo-meta/active-projects"
-printf '%s\n' "${publishable_projects[@]}" > "$APT_INPUT_DIR/repo-meta/published-projects"
+jq -r '.projects[].name' "$CONFIG" | sort -u > "$APT_INPUT_DIR/main/repo-meta/active-projects"
+jq -r '.projects[].name' "$CONFIG" | sort -u > "$APT_INPUT_DIR/additional/repo-meta/active-projects"
+
+: > "$APT_INPUT_DIR/main/repo-meta/published-projects"
+: > "$APT_INPUT_DIR/additional/repo-meta/published-projects"
+for key in "${publishable_keys[@]}"; do
+  project="${node_project[$key]}"
+  if [[ "${node_additional[$key]}" == true ]]; then
+    printf '%s\n' "$project" >> "$APT_INPUT_DIR/additional/repo-meta/published-projects"
+  else
+    printf '%s\n' "$project" >> "$APT_INPUT_DIR/main/repo-meta/published-projects"
+  fi
+done
+sort -u -o "$APT_INPUT_DIR/main/repo-meta/published-projects" "$APT_INPUT_DIR/main/repo-meta/published-projects"
+sort -u -o "$APT_INPUT_DIR/additional/repo-meta/published-projects" "$APT_INPUT_DIR/additional/repo-meta/published-projects"
 
 (
   cd "$ROOT"
@@ -176,3 +195,5 @@ printf '%s\n' "${publishable_projects[@]}" > "$APT_INPUT_DIR/repo-meta/published
 )
 
 echo "created=true" >> "$GITHUB_OUTPUT"
+
+

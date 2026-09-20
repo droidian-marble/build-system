@@ -25,7 +25,8 @@
   "projects": [
     {
       "name": "libhybris",
-      "enabled": true,
+      "base": true,
+      "additional": true,
       "repo": "https://github.com/droidian/libhybris.git",
       "branch": "feature/next/lindroid-drm",
       "apt_packages": [
@@ -35,16 +36,19 @@
     },
     {
       "name": "wlroots",
-      "enabled": true,
+      "base": false,
+      "additional": true,
       "repo": "https://github.com/droidian/wlroots.git",
       "branch": "feature/next/backport-0.18",
       "apt_packages": [
         "android-headers-30",
         "python3"
       ],
-      "dependencies": [
+      "dependencies": [],
+      "dependencies-additional": [
         {
           "project": "libhybris",
+          "additional": true,
           "packages": [
             "libandroid-properties1",
             "libandroid-properties-dev",
@@ -62,7 +66,7 @@
     },
     {
       "name": "linux-droidian-marble-gki",
-      "enabled": false,
+      "base": false,
       "repo": "https://github.com/droidian-marble/linux-droidian-marble-gki.git",
       "branch": "droidian",
       "architecture": "amd64",
@@ -74,7 +78,8 @@
     },
     {
       "name": "adaptation-xiaomi-marble",
-      "enabled": true,
+      "base": true,
+      "additional": false,
       "repo": "https://github.com/droidian-marble/adaptation-xiaomi-marble.git",
       "branch": "droidian",
       "apt_packages": [],
@@ -82,7 +87,7 @@
     },
     {
       "name": "lxc-android",
-      "enabled": true,
+      "base": true,
       "repo": "https://github.com/droidian/lxc-android.git",
       "branch": "droidian",
       "apt_packages": [],

@@ -62,9 +62,11 @@ jobs:
         if: steps.artifact.outputs.available == 'true'
         run: |
           incoming="$RUNNER_TEMP/incoming-packages"
-          published="$incoming/repo-meta/published-projects"
-          active="$incoming/repo-meta/active-projects"
-          if [[ -s "$published" && -s "$active" ]]; then
+          main_active="$incoming/main/repo-meta/active-projects"
+          main_published="$incoming/main/repo-meta/published-projects"
+          additional_active="$incoming/additional/repo-meta/active-projects"
+          additional_published="$incoming/additional/repo-meta/published-projects"
+          if [[ -f "$main_active" && -f "$main_published" && -f "$additional_active" && -f "$additional_published" ]] && (grep -q '[^[:space:]]' "$main_published" || grep -q '[^[:space:]]' "$additional_published"); then
             echo "publish=true" >> "$GITHUB_OUTPUT"
             echo "path=$incoming" >> "$GITHUB_OUTPUT"
           else
@@ -119,3 +121,5 @@ jobs:
           cp -a "$APT_REPO_DIR"/. "$pages_dir"/
           rm -rf "$pages_dir/.git" "$pages_dir/.repo-state"
           echo "path=$pages_dir" >> "$GITHUB_OUTPUT"
+
+

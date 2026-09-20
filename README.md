@@ -1,6 +1,11 @@
 # Droidian Package Builder
 
-Droidian package projects are configured in `projects.json`.
+Droidian package projects are configured in `projects.json`. A project can have two build variants:
+
+- `base`: applies the normal patch/script layer and publishes to APT suite `main`, component `main`.
+- `additional`: applies the base layer plus the additional patch/script layer and publishes to APT suite `additional`, component `main`.
+
+The `base` and `additional` booleans control automatic selection only. A variant can still be requested manually or selected as a dependency while its automatic flag is `false`.
 
 ## Repository layout
 
@@ -11,10 +16,19 @@ Droidian package projects are configured in `projects.json`.
 
 patches/
 └── <project>/
-    ├── 0001-description.patch
-    └── 0002-description.patch
+    └── 0001-description.patch
+
+patches-additional/
+└── <project>/
+    └── 0001-description.patch
 
 project-scripts/
+├── before/
+│   └── <project>
+└── after/
+    └── <project>
+
+project-scripts-additional/
 ├── before/
 │   └── <project>
 └── after/
@@ -24,6 +38,8 @@ scripts/
 ├── build.sh
 ├── build-project.sh
 ├── ci-plan.sh
+├── local-build.sh
+├── local-build-project.sh
 ├── prepare-bundle.sh
 ├── publish-apt-repo.sh
 ├── validate.sh
@@ -34,215 +50,125 @@ projects.json
 
 ## Project configuration
 
-`projects.json` contains shared defaults and project entries.
-
 ```json
 {
-  "defaults": {
-    "architecture": "arm64",
-    "images": {
-      "arm64": "quay.io/droidian/build-essential:next-arm64",
-      "amd64": "quay.io/droidian/build-essential:current-amd64"
-    },
-    "runners": {
-      "arm64": "ubuntu-24.04-arm",
-      "amd64": "ubuntu-latest"
-    },
-    "build_command": "releng-build-package",
-    "deb_build_options": "nocheck",
-    "deb_fullname": "Droidian Patch Builder",
-    "deb_email": "builder@localhost",
-    "apt_packages": [
-      "devscripts",
-      "equivs",
-      "dpkg-dev",
-      "jq"
-    ]
-  },
-  "projects": [
+  "name": "application-example",
+  "base": true,
+  "additional": true,
+  "repo": "https://github.com/example/application-example.git",
+  "branch": "main",
+  "apt_packages": [],
+  "dependencies": [
     {
-      "name": "library-example",
-      "enabled": true,
-      "repo": "https://github.com/example/library-example.git",
-      "branch": "main",
-      "apt_packages": [
-        "example-build-dependency"
-      ],
-      "dependencies": []
-    },
+      "project": "library-example",
+      "packages": ["library-example"]
+    }
+  ],
+  "dependencies-additional": [
     {
-      "name": "application-example",
-      "enabled": true,
-      "repo": "https://github.com/example/application-example.git",
-      "branch": "main",
-      "architecture": "amd64",
-      "apt_packages": [],
-      "build_command": "releng-build-package",
-      "dependencies": [
-        {
-          "project": "library-example",
-          "packages": [
-            "library-example",
-            "library-example-dev"
-          ]
-        }
-      ]
+      "project": "library-example",
+      "additional": true,
+      "packages": ["library-example"]
     }
   ]
 }
 ```
 
-### `name`
+### Automatic build flags
 
-Project identifier. The same value is used for patches, project scripts, build output and CI artifacts.
+`base: true` selects the base variant during an automatic build. `additional: true` selects the additional variant during an automatic build. `additional` defaults to `false` when omitted.
+
+These flags do not disable a variant. For example, a project with no `additional: true` can still be requested explicitly as `<project>-additional`, or be selected by a dependency with `"additional": true`.
+
+### Dependencies
+
+`dependencies` is the dependency set used by a base build. Dependency entries default to the base variant:
+
+```json
+{
+  "project": "library-example",
+  "packages": ["library-example", "library-example-dev"]
+}
+```
+
+Set `additional: true` on a dependency entry to consume that project's additional build:
+
+```json
+{
+  "project": "library-example",
+  "additional": true,
+  "packages": ["library-example"]
+}
+```
+
+For an additional consumer build, `dependencies-additional` overlays `dependencies`. If the same project is present in `dependencies-additional`, that entry replaces the base dependency entry for the additional consumer. Other base dependencies are inherited unchanged.
+
+For example:
 
 ```text
-patches/<name>/
-project-scripts/before/<name>
-project-scripts/after/<name>
-dist/<name>/
+application/base
+├── library/base
+└── helper/base
+
+application/additional
+├── library/additional
+└── helper/base
 ```
 
-### `enabled`
+An empty `packages` array installs every `.deb` produced by that dependency.
 
-Controls whether the project is selected when no project list is supplied.
+## Patch layers
 
-```json
-"enabled": true
-```
-
-A disabled project is still selected when an enabled or explicitly requested project depends on it.
-
-### `repo`
-
-Git repository to clone.
-
-```json
-"repo": "https://github.com/example/project.git"
-```
-
-### `branch`
-
-Branch to clone.
-
-```json
-"branch": "main"
-```
-
-### `architecture`
-
-Selects the default runner and build image from `defaults.runners` and `defaults.images`.
-
-```json
-"architecture": "arm64"
-```
-
-If omitted, `defaults.architecture` is used.
-
-Supported architecture values are:
+Base builds apply:
 
 ```text
-arm64
-amd64
+patches/<project>/*.patch
 ```
 
-### `image`
-
-Optional per-project build image override.
-
-```json
-"image": "quay.io/droidian/build-essential:next-arm64"
-```
-
-If omitted, the image is selected from `defaults.images` using the project architecture.
-
-### `runner`
-
-Optional per-project GitHub Actions runner override.
-
-```json
-"runner": "ubuntu-24.04-arm"
-```
-
-If omitted, the runner is selected from `defaults.runners` using the project architecture.
-
-### `apt_packages`
-
-Additional packages installed before the project is built.
-
-```json
-"apt_packages": [
-  "android-headers-30",
-  "python3"
-]
-```
-
-Packages in `defaults.apt_packages` are installed for every project.
-
-### `build_command`
-
-Command executed from the cloned project source directory.
-
-```json
-"build_command": "releng-build-package"
-```
-
-If omitted, `defaults.build_command` is used.
-
-Shell commands may be used when a project needs a custom build invocation.
-
-```json
-"build_command": "export EXAMPLE=1; debuild --no-sign"
-```
-
-### `dependencies`
-
-Declares packages that must be built before the project.
-
-```json
-"dependencies": [
-  {
-    "project": "library-example",
-    "packages": [
-      "library-example",
-      "library-example-dev"
-    ]
-  }
-]
-```
-
-The listed binary package names are installed from the dependency project's build output before the current project is built.
-
-Use an empty `packages` array to install every `.deb` produced by that dependency:
-
-```json
-"dependencies": [
-  {
-    "project": "library-example",
-    "packages": []
-  }
-]
-```
-
-## Project scripts
-
-Optional project-specific scripts are stored as:
+Additional builds apply, in order:
 
 ```text
-project-scripts/before/<project-name>
-project-scripts/after/<project-name>
+patches/<project>/*.patch
+patches-additional/<project>/*.patch
 ```
 
-`before/<project-name>` runs after APT packages and dependency packages are installed and before `build_command`.
+Active patch names use a four-digit numeric prefix and are applied in numeric order:
 
-`after/<project-name>` runs after `build_command` and before build artifacts are copied to `dist/<project-name>/`.
+```text
+0001-first-change.patch
+0002-second-change.patch
+```
 
-Scripts are executed with Bash from the cloned project source directory.
+Additional patch files may remain in the repository even when `additional` automatic selection is disabled.
 
-Available variables:
+## Project script layers
+
+Base builds run:
+
+```text
+project-scripts/before/<project>
+BUILD
+project-scripts/after/<project>
+```
+
+Additional builds run:
+
+```text
+project-scripts/before/<project>
+project-scripts-additional/before/<project>
+BUILD
+project-scripts/after/<project>
+project-scripts-additional/after/<project>
+```
+
+Each project script path is a Bash script file, not a directory. Missing scripts are allowed.
+
+Available variables include:
 
 ```text
 PROJECT_NAME
+PROJECT_VARIANT
+PROJECT_ADDITIONAL
 PROJECT_REPO
 PROJECT_BRANCH
 PROJECT_SOURCE_DIR
@@ -253,91 +179,92 @@ DEBFULLNAME
 DEBEMAIL
 ```
 
-A project does not need either script.
+## CI planning
 
-## Patches
+The internal build graph identifies a node by project and variant, so `libhybris` and `libhybris [additional]` are separate build nodes.
 
-Project patches are stored under:
+An empty workflow input selects every automatic root from `base: true` and `additional: true`, then adds its dependency closure.
 
-```text
-patches/<project-name>/
-```
-
-Active patch names must use a four-digit numeric prefix:
+Manual workflow targets use the project name for base and the `-additional` suffix for additional:
 
 ```text
-0001-first-change.patch
-0002-second-change.patch
+libhybris
+libhybris-additional
+wlroots-additional
 ```
 
-Patches are applied in numeric order.
+Multiple targets are comma-separated.
 
-To keep a patch in the repository without applying it, rename it to:
+GitHub Actions displays additional jobs as:
 
 ```text
-0003-example.patch.disabled
+Build libhybris [additional]
 ```
 
-A project does not need patches.
+Artifacts use:
 
-## Building
+```text
+project-libhybris
+project-libhybris-additional
+```
 
-Build all enabled projects when their dependency closure uses one build architecture:
+## Direct builds
+
+`scripts/build.sh` builds directly in the current environment and therefore expects the environment architecture to match the selected matrix group.
 
 ```bash
-./scripts/build.sh
+./scripts/build.sh libhybris
+./scripts/build.sh --additional libhybris
 ```
 
-Build one project and its dependencies:
+A no-argument direct build can only proceed when the selected graph uses one build architecture.
+
+## Local container builds
+
+Use `local-build.sh` on the host. It selects Podman or Docker and uses the project image and `--platform`, allowing the container runtime/binfmt setup to handle cross-architecture execution.
 
 ```bash
-./scripts/build.sh application-example
+./scripts/local-build.sh libhybris
+./scripts/local-build.sh --additional wlroots
 ```
 
-Build multiple projects that use the same build architecture:
+Dependencies are built first in their own containers and consumed from `local-output`.
 
-```bash
-./scripts/build.sh library-example application-example
-```
-
-Local builds must run in an environment matching the configured architecture of the selected projects. If the selection contains multiple build architectures, build each architecture group separately.
-
-Build output is written to:
+Outputs are stored under:
 
 ```text
-dist/<project-name>/
+local-output/<project>/base/
+local-output/<project>/additional/
 ```
 
-## GitHub Actions
+## APT repository
 
-Manual workflow runs accept a comma-separated `projects` input. An empty value selects all enabled projects.
-
-Examples:
+The published repository has two suites, both using component `main`:
 
 ```text
-application-example
+deb https://droidian-marble.github.io/build-system/ additional main
+deb https://droidian-marble.github.io/build-system/ main main
 ```
+
+The repository layout is:
 
 ```text
-library-example,application-example
+dists/main/main/binary-arm64/
+dists/additional/main/binary-arm64/
+pool/main/
+pool/additional/
 ```
 
-Dependencies are selected automatically and resolved before projects that require them are built.
+Base build environments enable only `main main` and pin the repository origin to priority `1003`.
 
-Each successful project produces an intermediate artifact named:
+Additional build environments enable both suites. The `additional main` source is listed first, and suite `additional` receives priority `1004`; `main` remains at `1003`.
 
-```text
-project-<project-name>
-```
+APT preferences select versions, not different source instances of an identical version. If base and additional publish different package contents with the same package name and Debian version, the additional source ordering makes the additional instance win inside additional build environments, but publishing distinct package versions is still the correct long-term package model.
 
-The final bundle is published as:
+## Publishing and failure isolation
 
-```text
-droidian-packages-arm64.zip
-```
+Build artifacts are grouped by dependency-connected build components. A failed component is omitted from the publish bundle, while independent successful components can still be published.
 
-Projects connected by dependencies are included in the final bundle only when the entire connected build component succeeds. Independent successful components are still included when another component fails.
-
-The build workflow also produces `apt-repo-input`, which contains the `.deb` files and repository metadata consumed by the repository publishing workflow.
+Base and additional repository ownership state are independent. Disabling automatic selection does not remove stored repository ownership; removing a project from `projects.json` does.
 
 

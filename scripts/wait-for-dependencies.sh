@@ -24,7 +24,11 @@ done
 
 jq -e '
   type == "array"
-  and all(.[]; type == "string" and length > 0)
+  and all(.[];
+    type == "object"
+    and (.name | type == "string" and length > 0)
+    and ((.additional // false) | type == "boolean")
+  )
 ' <<< "$DEPENDENCIES_JSON" >/dev/null
 
 if [[ "$(jq 'length' <<< "$DEPENDENCIES_JSON")" == "0" ]]; then
@@ -48,9 +52,7 @@ list_run_jobs() {
   local page=1 response count combined='[]'
 
   while :; do
-    response="$(
-      api_get "/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100&page=$page"
-    )"
+    response="$(api_get "/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100&page=$page")"
     combined="$(jq -cn --argjson left "$combined" --argjson right "$(jq '.jobs' <<< "$response")" '$left + $right')"
     count="$(jq '.jobs | length' <<< "$response")"
     (( count == 100 )) || break
@@ -64,9 +66,7 @@ list_run_artifacts() {
   local page=1 response count combined='[]'
 
   while :; do
-    response="$(
-      api_get "/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100&page=$page"
-    )"
+    response="$(api_get "/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100&page=$page")"
     combined="$(jq -cn --argjson left "$combined" --argjson right "$(jq '.artifacts' <<< "$response")" '$left + $right')"
     count="$(jq '.artifacts | length' <<< "$response")"
     (( count == 100 )) || break
@@ -76,10 +76,26 @@ list_run_artifacts() {
   printf '%s\n' "$combined"
 }
 
+dependency_artifact_name() {
+  local project="$1" additional="$2"
+  printf 'project-%s' "$project"
+  [[ "$additional" == true ]] && printf '%s' '-additional'
+  printf '\n'
+}
+
+dependency_job_name() {
+  local project="$1" additional="$2"
+  printf 'Build %s' "$project"
+  [[ "$additional" == true ]] && printf ' [additional]'
+  printf '\n'
+}
+
 download_artifact() {
-  local dependency="$1" artifact_id="$2"
-  local archive="$tmp_dir/$dependency.zip"
-  local destination="$DEPENDENCY_OUTPUT_ROOT/project-$dependency"
+  local dependency="$1" additional="$2" artifact_id="$3"
+  local artifact_name archive destination
+  artifact_name="$(dependency_artifact_name "$dependency" "$additional")"
+  archive="$tmp_dir/$artifact_name.zip"
+  destination="$DEPENDENCY_OUTPUT_ROOT/$artifact_name"
 
   rm -rf "$destination"
   mkdir -p "$destination"
@@ -106,8 +122,8 @@ while :; do
   jobs="$(list_run_jobs)"
   pending=false
 
-  while IFS= read -r dependency; do
-    job_name="Build $dependency"
+  while IFS=$'\t' read -r dependency additional; do
+    job_name="$(dependency_job_name "$dependency" "$additional")"
     job="$(
       jq -c --arg name "$job_name" '
         [.[] | select(.name == $name)]
@@ -129,10 +145,10 @@ while :; do
     fi
 
     if [[ "$conclusion" != "success" ]]; then
-      echo "Dependency failed: $dependency ($conclusion)"
+      echo "Dependency failed: $dependency$([[ "$additional" == true ]] && printf '%s' ' [additional]') ($conclusion)"
       exit 1
     fi
-  done < <(jq -r '.[]' <<< "$DEPENDENCIES_JSON")
+  done < <(jq -r '.[] | [.name, ((.additional // false) | tostring)] | @tsv' <<< "$DEPENDENCIES_JSON")
 
   $pending || break
 
@@ -149,8 +165,8 @@ while :; do
   missing=false
   declare -A artifact_ids=()
 
-  while IFS= read -r dependency; do
-    artifact_name="project-$dependency"
+  while IFS=$'\t' read -r dependency additional; do
+    artifact_name="$(dependency_artifact_name "$dependency" "$additional")"
     artifact_id="$(
       jq -r --arg name "$artifact_name" '
         [.[] | select(.name == $name and (.expired | not))]
@@ -159,12 +175,13 @@ while :; do
       ' <<< "$artifacts"
     )"
 
+    key="$dependency|$additional"
     if [[ -z "$artifact_id" ]]; then
       missing=true
     else
-      artifact_ids["$dependency"]="$artifact_id"
+      artifact_ids["$key"]="$artifact_id"
     fi
-  done < <(jq -r '.[]' <<< "$DEPENDENCIES_JSON")
+  done < <(jq -r '.[] | [.name, ((.additional // false) | tostring)] | @tsv' <<< "$DEPENDENCIES_JSON")
 
   $missing || break
 
@@ -176,6 +193,6 @@ while :; do
   sleep 5
 done
 
-while IFS= read -r dependency; do
-  download_artifact "$dependency" "${artifact_ids[$dependency]}"
-done < <(jq -r '.[]' <<< "$DEPENDENCIES_JSON")
+while IFS=$'\t' read -r dependency additional; do
+  download_artifact "$dependency" "$additional" "${artifact_ids[$dependency|$additional]}"
+done < <(jq -r '.[] | [.name, ((.additional // false) | tostring)] | @tsv' <<< "$DEPENDENCIES_JSON")

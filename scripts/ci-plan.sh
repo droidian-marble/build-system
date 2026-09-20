@@ -12,99 +12,145 @@ for project in "${all_projects[@]}"; do
   exists["$project"]=1
 done
 
+node_key() {
+  printf '%s|%s\n' "$1" "$2"
+}
+
+split_key() {
+  NODE_PROJECT="${1%|*}"
+  NODE_ADDITIONAL="${1##*|}"
+}
+
 deps_of() {
-  jq -r --arg name "$1" '
-    .projects[]
-    | select(.name == $name)
-    | .dependencies[]?.project
+  local key="$1"
+  split_key "$key"
+  jq -r --arg name "$NODE_PROJECT" --argjson additional "$NODE_ADDITIONAL" '
+    def dependencies_for($project; $additional):
+      if $additional then
+        ($project["dependencies-additional"] // []) as $overrides
+        | ($overrides | map(.project)) as $override_projects
+        | ([($project.dependencies // [])[] | select(.project as $dep | ($override_projects | index($dep)) == null)] + $overrides)
+      else
+        ($project.dependencies // [])
+      end;
+    (.projects[] | select(.name == $name)) as $project
+    | dependencies_for($project; $additional)[]?
+    | "\(.project)|\((.additional // false) | tostring)"
   ' projects.json
 }
 
 select_with_dependencies() {
-  local project="$1" dependency
+  local key="$1" dependency
+  split_key "$key"
 
-  [[ ${exists[$project]:-0} == 1 ]] || {
-    echo "Unknown project: $project" >&2
+  [[ ${exists[$NODE_PROJECT]:-0} == 1 ]] || {
+    echo "Unknown project: $NODE_PROJECT" >&2
     exit 1
   }
-
-  [[ ${selected[$project]:-0} == 1 ]] && return
-  selected["$project"]=1
+  [[ ${selected[$key]:-0} == 1 ]] && return
+  selected["$key"]=1
 
   while IFS= read -r dependency; do
     [[ -n "$dependency" ]] && select_with_dependencies "$dependency"
-  done < <(deps_of "$project")
+  done < <(deps_of "$key")
 }
 
 depth_of() {
-  local project="$1" dependency dependency_depth max=-1
+  local key="$1" dependency dependency_depth max=-1
 
-  if [[ -n "${depth_cache[$project]+x}" ]]; then
-    printf '%s\n' "${depth_cache[$project]}"
+  if [[ -n "${depth_cache[$key]+x}" ]]; then
+    printf '%s\n' "${depth_cache[$key]}"
     return
   fi
 
-  [[ ${visiting[$project]:-0} == 1 ]] && {
-    echo "Dependency cycle detected at: $project" >&2
+  [[ ${visiting[$key]:-0} == 1 ]] && {
+    split_key "$key"
+    label="$NODE_PROJECT"
+    [[ "$NODE_ADDITIONAL" == true ]] && label+="-additional"
+    echo "Dependency cycle detected at: $label" >&2
     exit 1
   }
 
-  visiting["$project"]=1
+  visiting["$key"]=1
 
   while IFS= read -r dependency; do
     [[ -n "$dependency" ]] || continue
     dependency_depth="$(depth_of "$dependency")"
     (( dependency_depth > max )) && max="$dependency_depth"
-  done < <(deps_of "$project")
+  done < <(deps_of "$key")
 
-  visiting["$project"]=0
-  depth_cache["$project"]=$((max + 1))
-  printf '%s\n' "${depth_cache[$project]}"
+  visiting["$key"]=0
+  depth_cache["$key"]=$((max + 1))
+  printf '%s\n' "${depth_cache[$key]}"
 }
 
 if [[ -n "$REQUESTED" ]]; then
   IFS=',' read -r -a requested <<< "$REQUESTED"
 
-  for project in "${requested[@]}"; do
-    project="${project#"${project%%[![:space:]]*}"}"
-    project="${project%"${project##*[![:space:]]}"}"
-    [[ -n "$project" ]] && select_with_dependencies "$project"
+  for token in "${requested[@]}"; do
+    token="${token#"${token%%[![:space:]]*}"}"
+    token="${token%"${token##*[![:space:]]}"}"
+    [[ -n "$token" ]] || continue
+
+    if [[ ${exists[$token]:-0} == 1 ]]; then
+      select_with_dependencies "$(node_key "$token" false)"
+    elif [[ "$token" == *-additional && ${exists[${token%-additional}]:-0} == 1 ]]; then
+      select_with_dependencies "$(node_key "${token%-additional}" true)"
+    else
+      echo "Unknown project selection: $token" >&2
+      exit 1
+    fi
   done
 else
-  while IFS= read -r project; do
-    [[ -n "$project" ]] && select_with_dependencies "$project"
-  done < <(
-    jq -r '.projects[] | select(.enabled) | .name' projects.json
-  )
+  while IFS=$'\t' read -r project base additional; do
+    [[ "$base" == true ]] && select_with_dependencies "$(node_key "$project" false)"
+    [[ "$additional" == true ]] && select_with_dependencies "$(node_key "$project" true)"
+  done < <(jq -r '.projects[] | [.name, (.base // false), (.additional // false)] | @tsv' projects.json)
 fi
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 
-for project in "${!selected[@]}"; do
-  depth="$(depth_of "$project")"
+for key in "${!selected[@]}"; do
+  split_key "$key"
+  project="$NODE_PROJECT"
+  additional="$NODE_ADDITIONAL"
+  depth="$(depth_of "$key")"
 
   jq -c \
     --arg name "$project" \
+    --argjson additional "$additional" \
     --argjson depth "$depth" '
+      def dependencies_for($project; $additional):
+        if $additional then
+          ($project["dependencies-additional"] // []) as $overrides
+          | ($overrides | map(.project)) as $override_projects
+          | ([($project.dependencies // [])[] | select(.project as $dep | ($override_projects | index($dep)) == null)] + $overrides)
+        else
+          ($project.dependencies // [])
+        end;
       . as $root
       | ($root.projects[] | select(.name == $name)) as $project
       | ($project.architecture // $root.defaults.architecture // "arm64") as $arch
+      | dependencies_for($project; $additional) as $dependencies
       | {
           name: $project.name,
+          additional: $additional,
           depth: $depth,
           architecture: $arch,
           image: ($project.image // $root.defaults.images[$arch]),
           runner: ($project.runner // $root.defaults.runners[$arch]),
           container_options: ($project.container_options // ""),
-          dependencies: [($project.dependencies[]?.project)],
-          has_dependencies: (($project.dependencies // []) | length > 0)
+          dependencies: [($dependencies[]? | {name: .project, additional: (.additional // false)})],
+          has_dependencies: (($dependencies | length) > 0)
         }
     ' projects.json >> "$tmp"
 done
 
 jq -cs '
-  sort_by(.depth, .name)
+  sort_by(.depth, .name, .additional)
   | map(del(.depth))
   | {include: .}
 ' "$tmp"
+
+

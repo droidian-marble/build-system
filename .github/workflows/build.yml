@@ -5,13 +5,15 @@ on:
     paths:
       - projects.json
       - patches/**
+      - patches-additional/**
       - project-scripts/**
+      - project-scripts-additional/**
       - scripts/**
       - .github/workflows/build.yml
   workflow_dispatch:
     inputs:
       projects:
-        description: Comma-separated target project names; empty means all enabled projects
+        description: Comma-separated targets; append -additional for additional builds, empty means all base/additional=true builds
         required: false
         type: string
 
@@ -46,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
-    name: Build ${{ matrix.name }}
+    name: Build ${{ matrix.name }}${{ matrix.additional && ' [additional]' || '' }}
     runs-on: ${{ matrix.runner }}
     container:
       image: ${{ matrix.image }}
@@ -80,13 +82,17 @@ jobs:
       - name: Build project
         env:
           DEPENDENCY_OUTPUT_ROOT: ${{ github.workspace }}/dependency-artifacts
-        run: ./scripts/build-project.sh "${{ matrix.name }}"
+          BUILD_ADDITIONAL: ${{ matrix.additional }}
+        run: |
+          args=("${{ matrix.name }}")
+          [[ "$BUILD_ADDITIONAL" == true ]] && args+=(--additional)
+          ./scripts/build-project.sh "${args[@]}"
 
       - name: Upload project artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: project-${{ matrix.name }}
-          path: dist/${{ matrix.name }}/
+          name: project-${{ matrix.name }}${{ matrix.additional && '-additional' || '' }}
+          path: dist/${{ matrix.name }}/${{ matrix.additional && 'additional' || 'base' }}/
           if-no-files-found: error
           retention-days: 1
 
