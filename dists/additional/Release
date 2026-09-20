@@ -1,0 +1,24 @@
+Architectures: arm64
+Codename: additional
+Components: main
+Date: Sun, 20 Sep 2026 21:39:33 +0000
+Description: Droidian ARM64 package repository (additional)
+Label: Droidian Patch Builder
+Origin: Droidian Patch Builder
+Suite: additional
+MD5Sum:
+ 19aabf6bdbb5bdd946d22690ce033342              236 Release
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-arm64/Packages
+ aca3a78ab853d3e8ce138abc4cb55d93               29 main/binary-arm64/Packages.gz
+SHA1:
+ d7ba582c78bd5190822d19ee1414ed0f2fcaa176              236 Release
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-arm64/Packages
+ bff25a25bc82ac656d95e00b1b919d5bc05376db               29 main/binary-arm64/Packages.gz
+SHA256:
+ 6fca18c140b90beb01d2f1d3df2471b0e3c394cd5ff53c52227b20869f67f14d              236 Release
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-arm64/Packages
+ f8464cd8da0db32ef19ab02f596dec4c6b31b0dc660326494aa1a875bc63831c               29 main/binary-arm64/Packages.gz
+SHA512:
+ 71c3990d63941c75a5999109989d1779505e5c48036fdf6682e0477d8a779d1a44272d68604c2d25d364a2123427c7e4c95a5a2a0848a5de5b0fabd30dd1b092              236 Release
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-arm64/Packages
+ 3a1106ac9f6bd5b7e716a10c2d9a3c9a669e925b0c63febd75e588edac4e6020b2d4fc9b4125c02cca9600adfa18b6edb35b53b9b25565e5f73015922537633c               29 main/binary-arm64/Packages.gz
