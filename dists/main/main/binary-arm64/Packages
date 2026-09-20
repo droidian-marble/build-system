@@ -1,24 +1,5 @@
 Package: adaptation-xiaomi-marble-android
 Architecture: all
-Version: 3.2.2+git20260920141818.fa634e6.droidian
-Priority: optional
-Section: metapackages
-Source: adaptation-xiaomi-marble
-Maintainer: Halhadus <eneshakans45@proton.me>
-Installed-Size: 45
-Filename: pool/adaptation-xiaomi-marble-android_3.2.2+git20260920141818.fa634e6.droidian_all.deb
-Size: 4800
-MD5sum: 973a6728eba3f4ad92275dfd52dd343f
-SHA1: 417c3ac70546f28541e28beb91385c31868a6d5c
-SHA256: 482fc0b2d26545fbf8ba9296fa25a3314017606b6d92e262298b5fd04b408fe0
-SHA512: 7f300ee1d2a405e5a0bb6f4abae4026a0a7b3ccc72712e5cabd23056eb946b068ba148494c6bcbfa972c6c44f9818047b20c3ef2d686a0605ec48a02ccb6df72
-Description: Xiaomi marble Android vendor adaptation
- Android vendor and system overrides required by Xiaomi marble.
-X-Droidian-Vcs-Revision: fa634e69b41772c263f451f3b362e0fc943fe39c
-X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
-
-Package: adaptation-xiaomi-marble-android
-Architecture: all
 Version: 3.2.2+git20260920150433.2874b32.droidian
 Priority: optional
 Section: metapackages
@@ -36,24 +17,23 @@ Description: Xiaomi marble Android vendor adaptation
 X-Droidian-Vcs-Revision: 2874b32c122d1cf943be38e3eb8116aacb62cff2
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
-Package: adaptation-xiaomi-marble-configs
+Package: adaptation-xiaomi-marble-android
 Architecture: all
-Version: 3.2.2+git20260920141818.fa634e6.droidian
+Version: 3.2.2+git20260920151040.4abcf88.droidian
 Priority: optional
 Section: metapackages
 Source: adaptation-xiaomi-marble
 Maintainer: Halhadus <eneshakans45@proton.me>
-Installed-Size: 95
-Depends: dconf-gsettings-backend | gsettings-backend
-Filename: pool/adaptation-xiaomi-marble-configs_3.2.2+git20260920141818.fa634e6.droidian_all.deb
-Size: 7528
-MD5sum: 698911890acfc7c12a6f9bd11fc82e72
-SHA1: 0aad42f564298c8e8a15d1b9456dee7326b4a670
-SHA256: 2efc8add10844cced2877577c0e30be57702c5612cbc6aac5e3c079fc26411d4
-SHA512: 2bdaf0ec33e657c4b45cf31a645d58610475e06c8f081fcffab50298dc60f28767a175bea2a4ec2a29031752e741dffc49f4db912567b85562d3c91b8c2eda1e
-Description: Xiaomi marble Droidian adaptation configuration
- Device-specific configuration files for Xiaomi marble.
-X-Droidian-Vcs-Revision: fa634e69b41772c263f451f3b362e0fc943fe39c
+Installed-Size: 187
+Filename: pool/adaptation-xiaomi-marble-android_3.2.2+git20260920151040.4abcf88.droidian_all.deb
+Size: 43008
+MD5sum: abf2d8d028e7039862130b8c8034d3ed
+SHA1: 018fd4740fadc91651b58f0e6a0c358e6f013151
+SHA256: c67c9489bfd84f66f7a7bbe17d4b2cf36c71f7c34bc32dd3e65e769041655885
+SHA512: 724933853675e60ce7dd4e2c646a9e8175368e276cddecdd4c21dd37c171fa47b8806db9ffd86e9346956a0e10280c3904b655feaf2ecb691edbd35d1743964a
+Description: Xiaomi marble Android vendor adaptation
+ Android vendor and system overrides required by Xiaomi marble.
+X-Droidian-Vcs-Revision: 4abcf8885dbfa3fa37860c80fc5cdfbb664e81fb
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
 Package: adaptation-xiaomi-marble-configs
@@ -76,23 +56,24 @@ Description: Xiaomi marble Droidian adaptation configuration
 X-Droidian-Vcs-Revision: 2874b32c122d1cf943be38e3eb8116aacb62cff2
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
-Package: adaptation-xiaomi-marble
+Package: adaptation-xiaomi-marble-configs
 Architecture: all
-Version: 3.2.2+git20260920141818.fa634e6.droidian
+Version: 3.2.2+git20260920151040.4abcf88.droidian
 Priority: optional
 Section: metapackages
+Source: adaptation-xiaomi-marble
 Maintainer: Halhadus <eneshakans45@proton.me>
-Installed-Size: 9
-Depends: adaptation-xiaomi-marble-configs, adaptation-xiaomi-marble-android
-Filename: pool/adaptation-xiaomi-marble_3.2.2+git20260920141818.fa634e6.droidian_all.deb
-Size: 1680
-MD5sum: 7821cad488f89f2a675d25464828e6b2
-SHA1: 3d69da6fc224afd96f38eb47cd019752ccbe9e4c
-SHA256: e01ee9469e55eb52ce5feaf6863eaedc85b049752224e5276038d96e0b6d0c56
-SHA512: 0a260beb34cc2afa23c4a5f12c3961ca74de9337c9bd7b34a0ce8762b13aa8abe38b7dee6b3ec85412c1134e6c7dab504bd9f2a76dacbe09cc09fe892bd10541
-Description: Xiaomi marble Droidian adaptation metapackage
- Device adaptation metapackage for Xiaomi marble.
-X-Droidian-Vcs-Revision: fa634e69b41772c263f451f3b362e0fc943fe39c
+Installed-Size: 95
+Depends: dconf-gsettings-backend | gsettings-backend
+Filename: pool/adaptation-xiaomi-marble-configs_3.2.2+git20260920151040.4abcf88.droidian_all.deb
+Size: 7528
+MD5sum: 8c5cb7e689f94653722da2f6a296ed10
+SHA1: 21de47c81aafccb9c6ee88f046bb6a700c7dd701
+SHA256: 7ffe764a9aa5707e1ae5ac53d4b47a15e416458b05a4f7efe6bb2491ee645736
+SHA512: 830199a05c92a772faf89e98e1e2f73144bf1761dec0c55a1f8d2cf8f74fc0802b9362b70f99406e4b4b09a6dc7c611ebb524a718308af5d30207ba6b032864a
+Description: Xiaomi marble Droidian adaptation configuration
+ Device-specific configuration files for Xiaomi marble.
+X-Droidian-Vcs-Revision: 4abcf8885dbfa3fa37860c80fc5cdfbb664e81fb
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
 Package: adaptation-xiaomi-marble
@@ -112,6 +93,25 @@ SHA512: da8566b6332636257830d2a2b50440dbf26eb67ebb303b765c0182242ae1e9736a1c5854
 Description: Xiaomi marble Droidian adaptation metapackage
  Device adaptation metapackage for Xiaomi marble.
 X-Droidian-Vcs-Revision: 2874b32c122d1cf943be38e3eb8116aacb62cff2
+X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
+
+Package: adaptation-xiaomi-marble
+Architecture: all
+Version: 3.2.2+git20260920151040.4abcf88.droidian
+Priority: optional
+Section: metapackages
+Maintainer: Halhadus <eneshakans45@proton.me>
+Installed-Size: 9
+Depends: adaptation-xiaomi-marble-configs, adaptation-xiaomi-marble-android
+Filename: pool/adaptation-xiaomi-marble_3.2.2+git20260920151040.4abcf88.droidian_all.deb
+Size: 1676
+MD5sum: 2db2c7aebcee0ca56af8c52d6e2af567
+SHA1: cc76b28ea9b8bca5b21dd760f79c905d691fe0c7
+SHA256: 83ccee4379a7ec32935a633d5065b00e72137e9f48659e1d1ac6fc8de80606b2
+SHA512: 8659f0bf4c7dfa41fb644ab0b670650e06319070fcd21b805837c14668beb533c32d9d11a09b5cd012ecccd6755bc25f6c0915e4d1495b832f0feb2e4d868fab
+Description: Xiaomi marble Droidian adaptation metapackage
+ Device adaptation metapackage for Xiaomi marble.
+X-Droidian-Vcs-Revision: 4abcf8885dbfa3fa37860c80fc5cdfbb664e81fb
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
 Package: flatpak-extension-gl-hybris-dbgsym
