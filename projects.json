@@ -25,7 +25,7 @@
   "projects": [
     {
       "name": "libhybris",
-      "base": true,
+      "base": false,
       "additional": true,
       "repo": "https://github.com/droidian/libhybris.git",
       "branch": "feature/next/lindroid-drm",
