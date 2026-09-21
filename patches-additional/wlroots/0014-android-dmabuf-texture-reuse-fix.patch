@@ -1,0 +1,112 @@
+diff --git a/render/gles2/texture.c b/render/gles2/texture.c
+index e3ab3a9b..b56196ec 100644
+--- a/render/gles2/texture.c
++++ b/render/gles2/texture.c
+@@ -37,6 +37,11 @@ static bool gles2_texture_update_from_buffer(struct wlr_texture *wlr_texture,
+ 		return texture->external_update(texture, buffer, damage);
+ 	}
+ 
++	struct wlr_dmabuf_attributes dmabuf;
++	if (wlr_buffer_get_dmabuf(buffer, &dmabuf)) {
++		return false;
++	}
++
+ 	if (texture->target != GL_TEXTURE_2D || texture->image != EGL_NO_IMAGE_KHR) {
+ 		return false;
+ 	}
+diff --git a/types/buffer/client.c b/types/buffer/client.c
+index 4cfa57a8..85a5e8b2 100644
+--- a/types/buffer/client.c
++++ b/types/buffer/client.c
+@@ -7,6 +7,58 @@
+ 
+ static const struct wlr_buffer_impl client_buffer_impl;
+ 
++enum client_buffer_source_type {
++	CLIENT_BUFFER_SOURCE_UNKNOWN,
++	CLIENT_BUFFER_SOURCE_SHM,
++	CLIENT_BUFFER_SOURCE_DMABUF,
++};
++
++static enum client_buffer_source_type client_buffer_source_type(
++		struct wlr_buffer *buffer, uint32_t *shm_format) {
++	struct wlr_dmabuf_attributes dmabuf;
++	if (wlr_buffer_get_dmabuf(buffer, &dmabuf)) {
++		return CLIENT_BUFFER_SOURCE_DMABUF;
++	}
++
++	struct wlr_shm_attributes shm;
++	if (wlr_buffer_get_shm(buffer, &shm)) {
++		if (shm_format != NULL) {
++			*shm_format = shm.format;
++		}
++		return CLIENT_BUFFER_SOURCE_SHM;
++	}
++
++	return CLIENT_BUFFER_SOURCE_UNKNOWN;
++}
++
++static bool client_buffer_sources_compatible(
++		struct wlr_client_buffer *client_buffer, struct wlr_buffer *next) {
++	if (client_buffer->source == NULL) {
++		return false;
++	}
++
++	uint32_t source_shm_format = 0, next_shm_format = 0;
++	enum client_buffer_source_type source_type = client_buffer_source_type(
++		client_buffer->source, &source_shm_format);
++	enum client_buffer_source_type next_type = client_buffer_source_type(
++		next, &next_shm_format);
++
++	if (source_type != next_type) {
++		return false;
++	}
++
++	switch (source_type) {
++	case CLIENT_BUFFER_SOURCE_SHM:
++		return source_shm_format == next_shm_format;
++	case CLIENT_BUFFER_SOURCE_DMABUF:
++		return true;
++	case CLIENT_BUFFER_SOURCE_UNKNOWN:
++		return false;
++	}
++
++	abort();
++}
++
+ struct wlr_client_buffer *wlr_client_buffer_get(struct wlr_buffer *wlr_buffer) {
+ 	if (wlr_buffer->impl != &client_buffer_impl) {
+ 		return NULL;
+@@ -72,8 +124,9 @@ struct wlr_client_buffer *wlr_client_buffer_create(struct wlr_buffer *buffer,
+ 	client_buffer->source = buffer;
+ 	client_buffer->texture = texture;
+ 
+-	wl_signal_add(&buffer->events.destroy, &client_buffer->source_destroy);
+ 	client_buffer->source_destroy.notify = client_buffer_handle_source_destroy;
++	wl_list_init(&client_buffer->source_destroy.link);
++	wl_signal_add(&buffer->events.destroy, &client_buffer->source_destroy);
+ 
+ 	// Ensure the buffer will be released before being destroyed
+ 	wlr_buffer_lock(&client_buffer->base);
+@@ -89,5 +142,20 @@ bool wlr_client_buffer_apply_damage(struct wlr_client_buffer *client_buffer,
+ 		return false;
+ 	}
+ 
+-	return wlr_texture_update_from_buffer(client_buffer->texture, next, damage);
++	if (!client_buffer_sources_compatible(client_buffer, next)) {
++		return false;
++	}
++
++	if (!wlr_texture_update_from_buffer(client_buffer->texture, next, damage)) {
++		return false;
++	}
++
++	if (client_buffer->source != next) {
++		wl_list_remove(&client_buffer->source_destroy.link);
++		wl_list_init(&client_buffer->source_destroy.link);
++		client_buffer->source = next;
++		wl_signal_add(&next->events.destroy, &client_buffer->source_destroy);
++	}
++
++	return true;
+ }
