@@ -1,24 +1,5 @@
 Package: adaptation-xiaomi-marble-android
 Architecture: all
-Version: 3.2.2+git20260920150433.2874b32.droidian
-Priority: optional
-Section: metapackages
-Source: adaptation-xiaomi-marble
-Maintainer: Halhadus <eneshakans45@proton.me>
-Installed-Size: 46
-Filename: pool/main/adaptation-xiaomi-marble-android_3.2.2+git20260920150433.2874b32.droidian_all.deb
-Size: 4812
-MD5sum: dea0c5b98721bc0da5a9ff99d5f2703a
-SHA1: 5ec0ded788b8cdba0a78f6565b69120824ec8da5
-SHA256: d870c321506ab34eeb675e50b512d0f43aa76da3b24453b5a674851aa2947596
-SHA512: df7d60517fd4f9f3f7809f8c7f3577d7328a55ca2b14eba3430b644bd212240620076cc58ccbc79657e528d5daa44cefe1f3e581706c1e91c1a238b32b9527a7
-Description: Xiaomi marble Android vendor adaptation
- Android vendor and system overrides required by Xiaomi marble.
-X-Droidian-Vcs-Revision: 2874b32c122d1cf943be38e3eb8116aacb62cff2
-X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
-
-Package: adaptation-xiaomi-marble-android
-Architecture: all
 Version: 3.2.2+git20260920151040.4abcf88.droidian
 Priority: optional
 Section: metapackages
@@ -36,24 +17,23 @@ Description: Xiaomi marble Android vendor adaptation
 X-Droidian-Vcs-Revision: 4abcf8885dbfa3fa37860c80fc5cdfbb664e81fb
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
-Package: adaptation-xiaomi-marble-configs
+Package: adaptation-xiaomi-marble-android
 Architecture: all
-Version: 3.2.2+git20260920150433.2874b32.droidian
+Version: 3.2.3+git20260921133531.dece274.droidian
 Priority: optional
 Section: metapackages
 Source: adaptation-xiaomi-marble
 Maintainer: Halhadus <eneshakans45@proton.me>
-Installed-Size: 95
-Depends: dconf-gsettings-backend | gsettings-backend
-Filename: pool/main/adaptation-xiaomi-marble-configs_3.2.2+git20260920150433.2874b32.droidian_all.deb
-Size: 7528
-MD5sum: c0d3a3666a89b162340a71db2e7b9698
-SHA1: d6d595032849f4073b06bbbe1ac5271f75fb7318
-SHA256: e7d925707351ee8c3930d730c58b1d05e32c25379be53ecb48a1084c8b33486a
-SHA512: 1ff881d3b682f594772777e9727dafe96f9be0f079fe366a458a2fd2f3f8f29ef7f15a09995fe7231265bf328e36d0594abf8ccc783c32050084046a288b3945
-Description: Xiaomi marble Droidian adaptation configuration
- Device-specific configuration files for Xiaomi marble.
-X-Droidian-Vcs-Revision: 2874b32c122d1cf943be38e3eb8116aacb62cff2
+Installed-Size: 45
+Filename: pool/main/adaptation-xiaomi-marble-android_3.2.3+git20260921133531.dece274.droidian_all.deb
+Size: 4792
+MD5sum: da72e33062f11ace9da5350dcd60811d
+SHA1: 776c75a0c374cf6a9f00ff1eb487487ee7aeab8f
+SHA256: ddfbff1e3b2b0be1cfd602f7287846c80ad97a75f35f5ded482ee58bca49fa3f
+SHA512: c8874d67fb8664ce0a636681650e14d03789566fe3c3aadd6b8c5c997c14d777527255944173faf1506519522853745b803cad10b4a943169e8825a6a1433f66
+Description: Xiaomi marble Android vendor adaptation
+ Android vendor and system overrides required by Xiaomi marble.
+X-Droidian-Vcs-Revision: dece274d4050b195b544abb5ffc80c20ca4dec8d
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
 Package: adaptation-xiaomi-marble-configs
@@ -76,23 +56,24 @@ Description: Xiaomi marble Droidian adaptation configuration
 X-Droidian-Vcs-Revision: 4abcf8885dbfa3fa37860c80fc5cdfbb664e81fb
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
-Package: adaptation-xiaomi-marble
+Package: adaptation-xiaomi-marble-configs
 Architecture: all
-Version: 3.2.2+git20260920150433.2874b32.droidian
+Version: 3.2.3+git20260921133531.dece274.droidian
 Priority: optional
 Section: metapackages
+Source: adaptation-xiaomi-marble
 Maintainer: Halhadus <eneshakans45@proton.me>
-Installed-Size: 9
-Depends: adaptation-xiaomi-marble-configs, adaptation-xiaomi-marble-android
-Filename: pool/main/adaptation-xiaomi-marble_3.2.2+git20260920150433.2874b32.droidian_all.deb
-Size: 1672
-MD5sum: 641fbad138da228b87514c9a7e16086e
-SHA1: 381540c7f8761ba8af03b83fe23e4372d41d1320
-SHA256: c3900abfd981b33bf269b5ef43f50f7bdefea84e2a9c64bb0c2884e999a79bd3
-SHA512: da8566b6332636257830d2a2b50440dbf26eb67ebb303b765c0182242ae1e9736a1c5854255a938781c74a1d03958ea70d21c8d87df52f1a3866d8b73e7fe121
-Description: Xiaomi marble Droidian adaptation metapackage
- Device adaptation metapackage for Xiaomi marble.
-X-Droidian-Vcs-Revision: 2874b32c122d1cf943be38e3eb8116aacb62cff2
+Installed-Size: 95
+Depends: dconf-gsettings-backend | gsettings-backend
+Filename: pool/main/adaptation-xiaomi-marble-configs_3.2.3+git20260921133531.dece274.droidian_all.deb
+Size: 7536
+MD5sum: 1df48d15908b5385dad648d64384e3df
+SHA1: c8714f4cd9af8b5e524091ce496228e2c61389d7
+SHA256: 343e75ee6708e925fb1333bd330f233ebb6e079527641c1b0a1926429cd4c61b
+SHA512: 34ac00080948d7647c7813bca514245d9c6a0811bdda4e857cf7d3a1c1c237ea334e47c88698b969013f4f0b3bb582c20ba33f36de409e3b835b5632feabbee7
+Description: Xiaomi marble Droidian adaptation configuration
+ Device-specific configuration files for Xiaomi marble.
+X-Droidian-Vcs-Revision: dece274d4050b195b544abb5ffc80c20ca4dec8d
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
 Package: adaptation-xiaomi-marble
@@ -112,6 +93,25 @@ SHA512: 8659f0bf4c7dfa41fb644ab0b670650e06319070fcd21b805837c14668beb533c32d9d11
 Description: Xiaomi marble Droidian adaptation metapackage
  Device adaptation metapackage for Xiaomi marble.
 X-Droidian-Vcs-Revision: 4abcf8885dbfa3fa37860c80fc5cdfbb664e81fb
+X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
+
+Package: adaptation-xiaomi-marble
+Architecture: all
+Version: 3.2.3+git20260921133531.dece274.droidian
+Priority: optional
+Section: metapackages
+Maintainer: Halhadus <eneshakans45@proton.me>
+Installed-Size: 9
+Depends: adaptation-xiaomi-marble-configs, adaptation-xiaomi-marble-android
+Filename: pool/main/adaptation-xiaomi-marble_3.2.3+git20260921133531.dece274.droidian_all.deb
+Size: 1664
+MD5sum: df91d878b37a7a2c9da644f136cbc972
+SHA1: f1afb5a8f1973d2e19e54f64c81fbb762535fe77
+SHA256: cefc11d0598d07358f48fe0d5ec2a94a5821682cefb67cd1eaae86ff83987fbe
+SHA512: b3ae475240e59deb653c5cc16dba314ee1afbe52aaf80dc6c74251d895ba7e8a21ce5c740875eacb23882577195bac1c2553bf98b928838ba629a4773ead05c9
+Description: Xiaomi marble Droidian adaptation metapackage
+ Device adaptation metapackage for Xiaomi marble.
+X-Droidian-Vcs-Revision: dece274d4050b195b544abb5ffc80c20ca4dec8d
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
 Package: linux-bootimage-5.10.236-xiaomi-marble
@@ -370,26 +370,6 @@ X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki
 
 Package: lxc-android
 Architecture: all
-Version: 1:40+git20260920233047.5753e64.droidian
-Priority: optional
-Section: libs
-Maintainer: Bardia Moshiri <fakeshell@bardia.tech>
-Installed-Size: 65
-Depends: adduser, cpio, droidian-apex-manager, lxc, libc-bin, halium-wrappers (>= 5), parse-android-dynparts, dmsetup
-Filename: pool/main/lxc-android_40+git20260920233047.5753e64.droidian_all.deb
-Size: 8476
-MD5sum: 0cd9afcaf87529e5c5df7dfbf42b8318
-SHA1: 0c05b56f0f1622153a3b14af74cf63136b1e020e
-SHA256: 984e1d18606be832c99465903ffbc2b4a4858a821452cdded3b5229b31aea3ac
-SHA512: 36227381340f0665820d5a1c0e7193da686d1e62bae5d1e05f9163e9f5829bd81dcc6eaae9beecbc9b817127f73b3381cef2f576de5276c4c6740dc1729c7c9b
-Homepage: https://github.com/Halium/lxc-android
-Description: lxc configuration for starting android
- This package provides the configuration for starting android in lxc
-X-Droidian-Vcs-Revision: 5753e645a9a029ab786eaae9ab462e624a69e806
-X-Droidian-Vcs-Url: https://github.com/droidian/lxc-android.git
-
-Package: lxc-android
-Architecture: all
 Version: 1:40+git20260921133429.a0a84f1.droidian
 Priority: optional
 Section: libs
@@ -406,5 +386,25 @@ Homepage: https://github.com/Halium/lxc-android
 Description: lxc configuration for starting android
  This package provides the configuration for starting android in lxc
 X-Droidian-Vcs-Revision: a0a84f114ed7a2b03162c48ebeadfa16003e9964
+X-Droidian-Vcs-Url: https://github.com/droidian/lxc-android.git
+
+Package: lxc-android
+Architecture: all
+Version: 1:40+git20260921134057.4d15981.droidian
+Priority: optional
+Section: libs
+Maintainer: Bardia Moshiri <fakeshell@bardia.tech>
+Installed-Size: 65
+Depends: adduser, cpio, droidian-apex-manager, lxc, libc-bin, halium-wrappers (>= 5), parse-android-dynparts, dmsetup
+Filename: pool/main/lxc-android_40+git20260921134057.4d15981.droidian_all.deb
+Size: 8472
+MD5sum: 8a9bd9139ec67434a9a8193d9d76dce1
+SHA1: e62ea850bf581af9c0812d5707ed416bd80c2602
+SHA256: 1efabc38c8906cd8bfada7112c07ea900d39e8c0416f9bcd0574fd1cc2beac7e
+SHA512: a54ff1e58d160212551f891959bbe9cdd3b506f4e59456213c69251f8bea7a8defd0d1f0b1ce67464578a05be1ea95fab153d7e633308ff20f26f02792aefc9c
+Homepage: https://github.com/Halium/lxc-android
+Description: lxc configuration for starting android
+ This package provides the configuration for starting android in lxc
+X-Droidian-Vcs-Revision: 4d15981dea45997d20cee93be2d5c7761c007726
 X-Droidian-Vcs-Url: https://github.com/droidian/lxc-android.git
 
