@@ -370,26 +370,6 @@ X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki
 
 Package: lxc-android
 Architecture: all
-Version: 1:40+git20260920213645.0a9a845.droidian
-Priority: optional
-Section: libs
-Maintainer: Bardia Moshiri <fakeshell@bardia.tech>
-Installed-Size: 65
-Depends: adduser, cpio, droidian-apex-manager, lxc, libc-bin, halium-wrappers (>= 5), parse-android-dynparts, dmsetup
-Filename: pool/main/lxc-android_40+git20260920213645.0a9a845.droidian_all.deb
-Size: 8464
-MD5sum: aa1a08afdf1f82a09014a255e6fce46d
-SHA1: 57b9c4e06ea43997fe58a5581ba179522a9c5110
-SHA256: e848b03eaa976767e2bec021a88b53b49f19735408c16dd499981a45bc15c127
-SHA512: 4416d236be2e5d48970ffc63f515a6ea99cd36789310a050437386aaae8cc50de030ffa45d85c9303e20280ccc312cc6f38139646df3bc7b1ad6d3911ddbc11e
-Homepage: https://github.com/Halium/lxc-android
-Description: lxc configuration for starting android
- This package provides the configuration for starting android in lxc
-X-Droidian-Vcs-Revision: 0a9a84564de0d20294158ce5a74a4d2514a3701e
-X-Droidian-Vcs-Url: https://github.com/droidian/lxc-android.git
-
-Package: lxc-android
-Architecture: all
 Version: 1:40+git20260920233047.5753e64.droidian
 Priority: optional
 Section: libs
@@ -406,5 +386,25 @@ Homepage: https://github.com/Halium/lxc-android
 Description: lxc configuration for starting android
  This package provides the configuration for starting android in lxc
 X-Droidian-Vcs-Revision: 5753e645a9a029ab786eaae9ab462e624a69e806
+X-Droidian-Vcs-Url: https://github.com/droidian/lxc-android.git
+
+Package: lxc-android
+Architecture: all
+Version: 1:40+git20260921133429.a0a84f1.droidian
+Priority: optional
+Section: libs
+Maintainer: Bardia Moshiri <fakeshell@bardia.tech>
+Installed-Size: 65
+Depends: adduser, cpio, droidian-apex-manager, lxc, libc-bin, halium-wrappers (>= 5), parse-android-dynparts, dmsetup
+Filename: pool/main/lxc-android_40+git20260921133429.a0a84f1.droidian_all.deb
+Size: 8472
+MD5sum: 6ac433941cb9a6485d45ef7e02259242
+SHA1: fc4be4f1e338974a8173475c8014d04266b9b899
+SHA256: 0096fab59a2e095290ea0879ae5905dcdede5e88743729b6bfec0dc67df0dcec
+SHA512: 70abc499a1d1ef5a20477f79f19e4c763159e454af360c73411095addab73679d7fdb5833f35195935f004b7a33052ccb0d4991fa334618d409edd81632e728e
+Homepage: https://github.com/Halium/lxc-android
+Description: lxc configuration for starting android
+ This package provides the configuration for starting android in lxc
+X-Droidian-Vcs-Revision: a0a84f114ed7a2b03162c48ebeadfa16003e9964
 X-Droidian-Vcs-Url: https://github.com/droidian/lxc-android.git
 
