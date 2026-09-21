@@ -1,0 +1,231 @@
+diff --git a/render/android/renderer.c b/render/android/renderer.c
+index 41e7814a..3bb9ebb3 100644
+--- a/render/android/renderer.c
++++ b/render/android/renderer.c
+@@ -1,4 +1,4 @@
+-#define _POSIX_C_SOURCE 199309L
++#define _POSIX_C_SOURCE 200809L
+ #include <assert.h>
+ #include <inttypes.h>
+ #include <stdint.h>
+@@ -6,6 +6,7 @@
+ #include <string.h>
+ #include <time.h>
+ #include <errno.h>
++#include <fcntl.h>
+ #include <poll.h>
+ #include <unistd.h>
+ #if defined(__aarch64__) || defined(__ARM_NEON)
+@@ -98,13 +99,14 @@ static bool android_env_enabled(const char *name, bool default_value) {
+ static size_t android_env_size(const char *name, size_t default_value,
+ 		size_t max_value) {
+ 	const char *value = getenv(name);
+-	if (value == NULL || *value == '\0') {
++	if (value == NULL || *value < '0' || *value > '9') {
+ 		return default_value;
+ 	}
+ 
+ 	char *end = NULL;
++	errno = 0;
+ 	unsigned long parsed = strtoul(value, &end, 10);
+-	if (end == value || *end != '\0') {
++	if (errno == ERANGE || end == value || *end != '\0') {
+ 		return default_value;
+ 	}
+ 	if (parsed > max_value) {
+@@ -248,7 +250,7 @@ static bool android_queue_gl_native_fence_wait(
+ 		return android_wait_and_close_sync_fd(sync_fd);
+ 	}
+ 
+-	int fallback_fd = dup(sync_fd);
++	int fallback_fd = fcntl(sync_fd, F_DUPFD_CLOEXEC, 0);
+ 	if (fallback_fd < 0) {
+ 		wlr_log_errno(WLR_ERROR,
+ 			"Android native fence: failed to duplicate Vulkan sync_fd");
+@@ -535,6 +537,9 @@ static void android_staging_pool_finish(
+ static struct wlr_android_staging_buffer *android_staging_allocate(
+ 		struct wlr_android_renderer *renderer, int width, int height,
+ 		int android_format, int usage) {
++	if (width <= 0 || height <= 0) {
++		return NULL;
++	}
+ 	struct wlr_android_staging_buffer *staging =
+ 		android_staging_pool_take(renderer, width, height,
+ 			android_format, usage);
+@@ -564,9 +569,10 @@ static struct wlr_android_staging_buffer *android_staging_allocate(
+ 	}
+ 
+ 	staging->stride = stride;
+-	if (height <= 0 || (size_t)stride > SIZE_MAX / 4 / (size_t)height) {
++	if (stride < (uint32_t)width || stride > INT32_MAX ||
++			(size_t)stride > SIZE_MAX / 4 / (size_t)height) {
+ 		wlr_log(WLR_ERROR,
+-			"Android staging allocation size overflow: %ux%d",
++			"Android staging invalid stride or allocation size: %ux%d",
+ 			stride, height);
+ 		android_staging_release_buffer(staging);
+ 		return NULL;
+@@ -649,8 +655,7 @@ static bool android_staging_copy(struct wlr_android_staging_buffer *staging,
+ 	bool have_source_dmabuf = wlr_buffer_get_dmabuf(buffer, &source_dmabuf);
+ 	if (!have_source_dmabuf || source_dmabuf.n_planes != 1 ||
+ 			source_dmabuf.format != staging->source_format ||
+-			(source_dmabuf.modifier != DRM_FORMAT_MOD_LINEAR &&
+-			source_dmabuf.modifier != DRM_FORMAT_MOD_INVALID) ||
++			source_dmabuf.modifier != DRM_FORMAT_MOD_LINEAR ||
+ 			buffer->width != staging->native_buffer.width ||
+ 			buffer->height != staging->native_buffer.height) {
+ 		return false;
+@@ -1137,7 +1142,11 @@ static struct wlr_texture *android_texture_from_dmabuf_staging_format(
+ 
+ 	struct wlr_egl_context prev_ctx;
+ 	wlr_egl_save_context(&prev_ctx);
+-	wlr_egl_make_current(gles2->egl);
++	if (!wlr_egl_make_current(gles2->egl)) {
++		wlr_egl_restore_context(&prev_ctx);
++		android_staging_release_buffer(staging);
++		return NULL;
++	}
+ 
+ 	const EGLint attribs[] = { EGL_NONE };
+ 	EGLImageKHR image = gles2->egl->procs.eglCreateImageKHR(
+@@ -1228,8 +1237,7 @@ static struct wlr_texture *android_texture_from_dmabuf_staging(
+ 	if (dmabuf->n_planes != 1 ||
+ 			(dmabuf->format != DRM_FORMAT_ARGB8888 &&
+ 			dmabuf->format != DRM_FORMAT_XRGB8888) ||
+-			(dmabuf->modifier != DRM_FORMAT_MOD_LINEAR &&
+-			dmabuf->modifier != DRM_FORMAT_MOD_INVALID)) {
++			dmabuf->modifier != DRM_FORMAT_MOD_LINEAR) {
+ 		return NULL;
+ 	}
+ 
+diff --git a/render/android/vulkan_bridge.c b/render/android/vulkan_bridge.c
+index cbc293f3..cbd035a7 100644
+--- a/render/android/vulkan_bridge.c
++++ b/render/android/vulkan_bridge.c
+@@ -148,9 +148,19 @@ static bool wait_source_dmabuf(int fd, uint64_t *wait_ns) {
+ 	};
+ 
+ 	int ret;
+-	do {
+-		ret = poll(&pfd, 1, 1000);
+-	} while (ret < 0 && errno == EINTR);
++	int timeout = 1000;
++	for (;;) {
++		ret = poll(&pfd, 1, timeout);
++		if (ret >= 0 || errno != EINTR) {
++			break;
++		}
++		uint64_t elapsed = monotonic_nsec() - start;
++		if (elapsed >= 1000000000ull) {
++			ret = 0;
++			break;
++		}
++		timeout = (int)((1000000000ull - elapsed + 999999ull) / 1000000ull);
++	}
+ 
+ 	*wait_ns = monotonic_nsec() - start;
+ 	if (ret < 0) {
+@@ -174,17 +184,24 @@ static bool wait_source_dmabuf(int fd, uint64_t *wait_ns) {
+ static struct wlr_android_vk_source *import_source(
+ 		struct wlr_android_vk_bridge *bridge, struct wlr_buffer *buffer,
+ 		const struct wlr_dmabuf_attributes *dmabuf) {
+-	if (dmabuf->n_planes != 1 ||
++	if (dmabuf->n_planes != 1 || dmabuf->fd[0] < 0 ||
++			dmabuf->width <= 0 || dmabuf->height <= 0 ||
++			dmabuf->width != buffer->width || dmabuf->height != buffer->height ||
+ 			(dmabuf->format != DRM_FORMAT_XRGB8888 &&
+-			dmabuf->format != DRM_FORMAT_ARGB8888)) {
++			dmabuf->format != DRM_FORMAT_ARGB8888) ||
++			dmabuf->modifier != DRM_FORMAT_MOD_LINEAR ||
++			(uint64_t)dmabuf->stride[0] < (uint64_t)dmabuf->width * 4 ||
++			dmabuf->stride[0] % 4 != 0 || dmabuf->offset[0] % 4 != 0) {
+ 		return NULL;
+ 	}
+ 
+ 	uint64_t modifier = dmabuf->modifier;
+-	if (modifier == DRM_FORMAT_MOD_INVALID) {
+-		modifier = DRM_FORMAT_MOD_LINEAR;
+-	}
+-	if (modifier != DRM_FORMAT_MOD_LINEAR) {
++	uint64_t minimum_size = (uint64_t)dmabuf->offset[0] +
++		(uint64_t)dmabuf->stride[0] * (uint64_t)dmabuf->height;
++	off_t fd_size = lseek(dmabuf->fd[0], 0, SEEK_END);
++	if (fd_size < 0 || (uint64_t)fd_size < minimum_size ||
++			lseek(dmabuf->fd[0], 0, SEEK_SET) < 0) {
++		wlr_log(WLR_DEBUG, "Android Vulkan bridge: invalid source DMA-BUF extent");
+ 		return NULL;
+ 	}
+ 
+@@ -257,6 +274,11 @@ static struct wlr_android_vk_source *import_source(
+ 	VkMemoryRequirements requirements;
+ 	vkGetImageMemoryRequirements(bridge->device->dev, source->image,
+ 		&requirements);
++	if (requirements.size > (uint64_t)fd_size) {
++		wlr_log(WLR_DEBUG,
++			"Android Vulkan bridge: source DMA-BUF smaller than Vulkan memory requirements");
++		goto error;
++	}
+ 	int memory_type = vulkan_find_mem_type(bridge->device, 0,
+ 		requirements.memoryTypeBits & fd_props.memoryTypeBits);
+ 	if (memory_type < 0) {
+diff --git a/types/wlr_linux_dmabuf_v1.c b/types/wlr_linux_dmabuf_v1.c
+index 49e08fb4..4d36041b 100644
+--- a/types/wlr_linux_dmabuf_v1.c
++++ b/types/wlr_linux_dmabuf_v1.c
+@@ -147,10 +147,14 @@ static bool buffer_begin_data_ptr_access(struct wlr_buffer *wlr_buffer,
+ 		return false;
+ 	}
+ 
+-	if (attribs->modifier != DRM_FORMAT_MOD_LINEAR &&
+-			attribs->modifier != DRM_FORMAT_MOD_INVALID) {
++	if (attribs->modifier != DRM_FORMAT_MOD_LINEAR) {
+ 		wlr_log(WLR_DEBUG,
+-			"Android DMA-BUF CPU fallback rejected non-linear modifier");
++			"Android DMA-BUF CPU fallback requires explicit LINEAR layout");
++		return false;
++	}
++
++	if (wlr_buffer->width <= 0 || wlr_buffer->height <= 0 ||
++			(uint64_t)attribs->stride[0] < (uint64_t)wlr_buffer->width * 4) {
+ 		return false;
+ 	}
+ 
+@@ -163,6 +167,12 @@ static bool buffer_begin_data_ptr_access(struct wlr_buffer *wlr_buffer,
+ 	}
+ 
+ 	if (buffer->mapped_data == NULL) {
++		off_t fd_size = lseek(attribs->fd[0], 0, SEEK_END);
++		if (fd_size < 0 || (uint64_t)fd_size < map_size ||
++				lseek(attribs->fd[0], 0, SEEK_SET) < 0) {
++			wlr_log(WLR_DEBUG, "Android DMA-BUF CPU fallback: invalid FD extent");
++			return false;
++		}
+ 		buffer->mapped_data = mmap(NULL, (size_t)map_size, PROT_READ,
+ 			MAP_SHARED, attribs->fd[0], 0);
+ 		if (buffer->mapped_data == MAP_FAILED) {
+@@ -187,7 +197,11 @@ static bool buffer_begin_data_ptr_access(struct wlr_buffer *wlr_buffer,
+ 		.flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ,
+ 	};
+ 
+-	if (ioctl(attribs->fd[0], DMA_BUF_IOCTL_SYNC, &sync) == 0) {
++	int ret;
++	do {
++		ret = ioctl(attribs->fd[0], DMA_BUF_IOCTL_SYNC, &sync);
++	} while (ret < 0 && (errno == EINTR || errno == EAGAIN));
++	if (ret == 0) {
+ 		buffer->data_access_active = true;
+ 	} else if (errno != ENOTTY && errno != EINVAL && errno != ENOSYS) {
+ 		wlr_log_errno(WLR_ERROR,
+@@ -213,7 +227,11 @@ static void buffer_end_data_ptr_access(struct wlr_buffer *wlr_buffer) {
+ 		.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ,
+ 	};
+ 
+-	if (ioctl(buffer->attributes.fd[0], DMA_BUF_IOCTL_SYNC, &sync) != 0 &&
++	int ret;
++	do {
++		ret = ioctl(buffer->attributes.fd[0], DMA_BUF_IOCTL_SYNC, &sync);
++	} while (ret < 0 && (errno == EINTR || errno == EAGAIN));
++	if (ret != 0 &&
+ 			errno != ENOTTY && errno != EINVAL && errno != ENOSYS) {
+ 		wlr_log_errno(WLR_ERROR,
+ 			"DMA_BUF_IOCTL_SYNC END failed");

@@ -1,0 +1,692 @@
+diff --git a/fb/fb.h b/fb/fb.h
+index c2c4cae78..87cb7dccf 100644
+--- a/fb/fb.h
++++ b/fb/fb.h
+@@ -394,8 +394,17 @@ typedef void (*FinishWrapProcPtr) (DrawablePtr pDraw);
+ 
+ #else
+ 
+-#define fbPrepareAccess(pPix)
+-#define fbFinishAccess(pDraw)
++/* Optional cache/synchronization hooks; native pixman fast paths remain enabled. */
++#define fbPrepareAccess(pDraw) do { \
++    FbScreenPrivPtr _fb = fbGetScreenPrivate((pDraw)->pScreen); \
++    if (_fb->prepareAccess) \
++        _fb->prepareAccess(pDraw); \
++} while (0)
++#define fbFinishAccess(pDraw) do { \
++    FbScreenPrivPtr _fb = fbGetScreenPrivate((pDraw)->pScreen); \
++    if (_fb->finishAccess) \
++        _fb->finishAccess(pDraw); \
++} while (0)
+ 
+ #endif
+ 
+@@ -407,6 +416,9 @@ typedef struct {
+ #ifdef FB_ACCESS_WRAPPER
+     SetupWrapProcPtr setupWrap; /* driver hook to set pixmap access wrapping */
+     FinishWrapProcPtr finishWrap;       /* driver hook to clean up pixmap access wrapping */
++#else
++    void (*prepareAccess)(DrawablePtr drawable);
++    void (*finishAccess)(DrawablePtr drawable);
+ #endif
+     DevPrivateKeyRec    gcPrivateKeyRec;
+     DevPrivateKeyRec    winPrivateKeyRec;
+diff --git a/fb/fbarc.c b/fb/fbarc.c
+index fe14aed61..ba81068d3 100644
+--- a/fb/fbarc.c
++++ b/fb/fbarc.c
+@@ -63,9 +63,7 @@ fbPolyArc(DrawablePtr pDrawable, GCPtr pGC, int narcs, xArc * parcs)
+             int x2, y2;
+             RegionPtr cclip;
+ 
+-#ifdef FB_ACCESS_WRAPPER
+             int wrapped = 1;
+-#endif
+ 
+             cclip = fbGetCompositeClip(pGC);
+             fbGetDrawable(pDrawable, dst, dstStride, dstBpp, dstXoff, dstYoff);
+@@ -90,43 +88,35 @@ fbPolyArc(DrawablePtr pDrawable, GCPtr pGC, int narcs, xArc * parcs)
+                     box.y2 = y2;
+                     if ((x2 <= SHRT_MAX) && (y2 <= SHRT_MAX) &&
+                         (RegionContainsRect(cclip, &box) == rgnIN)) {
+-#ifdef FB_ACCESS_WRAPPER
+                         if (!wrapped) {
+                             fbPrepareAccess(pDrawable);
+                             wrapped = 1;
+                         }
+-#endif
+                         (*arc) (dst, dstStride, dstBpp,
+                                 parcs, pDrawable->x + dstXoff,
+                                 pDrawable->y + dstYoff, pPriv->and, pPriv->xor);
+                     }
+                     else {
+-#ifdef FB_ACCESS_WRAPPER
+                         if (wrapped) {
+                             fbFinishAccess(pDrawable);
+                             wrapped = 0;
+                         }
+-#endif
+                         miZeroPolyArc(pDrawable, pGC, 1, parcs);
+                     }
+                 }
+                 else {
+-#ifdef FB_ACCESS_WRAPPER
+                     if (wrapped) {
+                         fbFinishAccess(pDrawable);
+                         wrapped = 0;
+                     }
+-#endif
+                     miPolyArc(pDrawable, pGC, 1, parcs);
+                 }
+                 parcs++;
+             }
+-#ifdef FB_ACCESS_WRAPPER
+             if (wrapped) {
+                 fbFinishAccess(pDrawable);
+                 wrapped = 0;
+             }
+-#endif
+         }
+         else
+             miZeroPolyArc(pDrawable, pGC, narcs, parcs);
+diff --git a/fb/fbpict.c b/fb/fbpict.c
+index f985198fb..6e07c8352 100644
+--- a/fb/fbpict.c
++++ b/fb/fbpict.c
+@@ -295,8 +295,10 @@ create_bits_picture(PicturePtr pict, Bool has_clip, int *xoff, int *yoff)
+                                      pixmap->drawable.height, (uint32_t *) bits,
+                                      stride * sizeof(FbStride));
+ 
+-    if (!image)
++    if (!image) {
++        fbFinishAccess(pict->pDrawable);
+         return NULL;
++    }
+ 
+ #ifdef FB_ACCESS_WRAPPER
+     pixman_image_set_accessors(image,
+diff --git a/hw/xwayland/xwayland-screen.c b/hw/xwayland/xwayland-screen.c
+index 822e55bf3..bedfe287f 100644
+--- a/hw/xwayland/xwayland-screen.c
++++ b/hw/xwayland/xwayland-screen.c
+@@ -264,6 +264,7 @@ xwl_close_screen(ScreenPtr screen)
+ 
+     RemoveNotifyFd(xwl_screen->wayland_fd);
+ 
++    xwl_shm_dri3_fini(screen);
+     wl_display_disconnect(xwl_screen->display);
+ 
+     screen->CloseScreen = xwl_screen->CloseScreen;
+@@ -583,11 +584,13 @@ xwl_read_events (struct xwl_screen *xwl_screen)
+     if (xwl_screen->wait_flush)
+         return;
+ 
+-    ret = wl_display_read_events(xwl_screen->display);
+-    if (ret == -1)
+-        xwl_give_up("failed to read Wayland events: %s\n", strerror(errno));
+-
+-    xwl_screen->prepare_read = 0;
++    /* A private-queue import may already have read and queued these events. */
++    if (xwl_screen->prepare_read) {
++        ret = wl_display_read_events(xwl_screen->display);
++        if (ret == -1)
++            xwl_give_up("failed to read Wayland events: %s\n", strerror(errno));
++        xwl_screen->prepare_read = 0;
++    }
+ 
+     ret = wl_display_dispatch_pending(xwl_screen->display);
+     if (ret == -1)
+@@ -1119,6 +1122,8 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
+         pScreen->CreateScreenResources = xwl_shm_create_screen_resources;
+         pScreen->CreatePixmap = xwl_shm_create_pixmap;
+         pScreen->DestroyPixmap = xwl_shm_destroy_pixmap;
++        if (!xwl_shm_dri3_init(pScreen))
++            return FALSE;
+     }
+ 
+     xwl_screen->RealizeWindow = pScreen->RealizeWindow;
+diff --git a/hw/xwayland/xwayland-shm.c b/hw/xwayland/xwayland-shm.c
+index faca5224e..3efc1778a 100644
+--- a/hw/xwayland/xwayland-shm.c
++++ b/hw/xwayland/xwayland-shm.c
+@@ -45,10 +45,23 @@
+ #include "xwayland-screen.h"
+ #include "xwayland-shm.h"
+ 
++#if defined(DRI3) && defined(__linux__)
++#include <assert.h>
++#include <drm_fourcc.h>
++#include <linux/dma-buf.h>
++#include <poll.h>
++#include <sys/ioctl.h>
++#include "dri3.h"
++#include "linux-dmabuf-unstable-v1-client-protocol.h"
++#endif
++
+ struct xwl_pixmap {
+     struct wl_buffer *buffer;
+     void *data;
+     size_t size;
++    int dmabuf_fd;
++    uint32_t offset;
++    unsigned int cpu_access_depth;
+ };
+ 
+ #ifndef HAVE_MKOSTEMP
+@@ -277,6 +290,7 @@ xwl_shm_create_pixmap(ScreenPtr screen,
+         goto err_destroy_pixmap;
+ 
+     xwl_pixmap->buffer = NULL;
++    xwl_pixmap->dmabuf_fd = -1;
+     xwl_pixmap->size = size;
+     fd = os_create_anonymous_file(size);
+     if (fd < 0)
+@@ -330,6 +344,9 @@ xwl_shm_destroy_pixmap(PixmapPtr pixmap)
+         if (xwl_pixmap->buffer)
+             wl_buffer_destroy(xwl_pixmap->buffer);
+         munmap(xwl_pixmap->data, xwl_pixmap->size);
++        if (xwl_pixmap->dmabuf_fd >= 0)
++            close(xwl_pixmap->dmabuf_fd);
++        xwl_pixmap_set_private(pixmap, NULL);
+         free(xwl_pixmap);
+     }
+ 
+@@ -374,3 +391,483 @@ xwl_shm_create_screen_resources(ScreenPtr screen)
+ 
+     return screen->devPrivate != NULL;
+ }
++
++/* Xwayland DRI3 linear DMA-BUF bridge. */
++#if defined(DRI3) && defined(__linux__)
++struct xwl_shm_dri3 {
++    struct zwp_linux_dmabuf_v1 *dmabuf;
++    Bool xrgb8888;
++    Bool argb8888;
++};
++
++static DevPrivateKeyRec xwl_shm_dri3_private_key;
++
++static struct xwl_shm_dri3 *
++xwl_shm_dri3_get(ScreenPtr screen)
++{
++    return dixLookupPrivate(&screen->devPrivates, &xwl_shm_dri3_private_key);
++}
++
++static Bool
++xwl_shm_dri3_has_format(struct xwl_shm_dri3 *dri3, uint32_t format)
++{
++    return (format == DRM_FORMAT_XRGB8888 && dri3->xrgb8888) ||
++        (format == DRM_FORMAT_ARGB8888 && dri3->argb8888);
++}
++
++static void
++xwl_shm_dri3_format(void *data, struct zwp_linux_dmabuf_v1 *dmabuf,
++                    uint32_t format)
++{
++    /* A format event alone does not guarantee a linear memory layout. */
++}
++
++static void
++xwl_shm_dri3_modifier(void *data, struct zwp_linux_dmabuf_v1 *dmabuf,
++                      uint32_t format, uint32_t hi, uint32_t lo)
++{
++    struct xwl_shm_dri3 *dri3 = data;
++    uint64_t modifier = ((uint64_t) hi << 32) | lo;
++
++    if (modifier != DRM_FORMAT_MOD_LINEAR)
++        return;
++    if (format == DRM_FORMAT_XRGB8888)
++        dri3->xrgb8888 = TRUE;
++    else if (format == DRM_FORMAT_ARGB8888)
++        dri3->argb8888 = TRUE;
++}
++
++static const struct zwp_linux_dmabuf_v1_listener xwl_shm_dri3_listener = {
++    .format = xwl_shm_dri3_format,
++    .modifier = xwl_shm_dri3_modifier,
++};
++
++static void
++xwl_shm_dri3_global(void *data, struct wl_registry *registry,
++                    uint32_t name, const char *interface, uint32_t version)
++{
++    struct xwl_shm_dri3 *dri3 = data;
++
++    if (dri3->dmabuf || version < 3 ||
++        strcmp(interface, "zwp_linux_dmabuf_v1") != 0)
++        return;
++    dri3->dmabuf = wl_registry_bind(registry, name,
++                                    &zwp_linux_dmabuf_v1_interface, 3);
++    if (dri3->dmabuf)
++        zwp_linux_dmabuf_v1_add_listener(dri3->dmabuf,
++                                         &xwl_shm_dri3_listener, dri3);
++}
++
++static void
++xwl_shm_dri3_global_remove(void *data, struct wl_registry *registry,
++                           uint32_t name)
++{
++}
++
++static const struct wl_registry_listener xwl_shm_dri3_registry_listener = {
++    .global = xwl_shm_dri3_global,
++    .global_remove = xwl_shm_dri3_global_remove,
++};
++
++static Bool
++xwl_shm_dmabuf_sync(int fd, uint64_t flags)
++{
++    struct dma_buf_sync sync = { .flags = flags };
++    int ret;
++
++    do {
++        ret = ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
++    } while (ret < 0 && (errno == EINTR || errno == EAGAIN));
++    return ret == 0;
++}
++
++static struct xwl_pixmap *
++xwl_shm_dri3_drawable(DrawablePtr drawable)
++{
++    PixmapPtr pixmap;
++
++    if (drawable->type == DRAWABLE_PIXMAP)
++        pixmap = (PixmapPtr) drawable;
++    else
++        pixmap = drawable->pScreen->GetWindowPixmap((WindowPtr) drawable);
++    return xwl_pixmap_get(pixmap);
++}
++
++static void
++xwl_shm_dri3_prepare_access(DrawablePtr drawable)
++{
++    struct xwl_pixmap *pixmap = xwl_shm_dri3_drawable(drawable);
++    struct pollfd pfd;
++    int ret;
++
++    if (!pixmap || pixmap->dmabuf_fd < 0 || pixmap->cpu_access_depth++)
++        return;
++
++    /* fb can both read and write, including nested access to the same BO.
++     * These waits are only for CPU fallback, never for a Present flip.
++     */
++    pfd = (struct pollfd) { .fd = pixmap->dmabuf_fd, .events = POLLOUT };
++    do {
++        ret = poll(&pfd, 1, 5000);
++    } while (ret < 0 && errno == EINTR);
++    if (ret <= 0 || (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) ||
++        !(pfd.revents & POLLOUT))
++        FatalError("Xwayland DRI3 linear: DMA-BUF CPU access wait failed\n");
++    if (!xwl_shm_dmabuf_sync(pixmap->dmabuf_fd,
++                             DMA_BUF_SYNC_START | DMA_BUF_SYNC_RW))
++        FatalError("Xwayland DRI3 linear: DMA-BUF SYNC_START: %s\n",
++                   strerror(errno));
++}
++
++static void
++xwl_shm_dri3_finish_access(DrawablePtr drawable)
++{
++    struct xwl_pixmap *pixmap = xwl_shm_dri3_drawable(drawable);
++
++    if (!pixmap || pixmap->dmabuf_fd < 0)
++        return;
++    assert(pixmap->cpu_access_depth > 0);
++    if (--pixmap->cpu_access_depth)
++        return;
++    if (!xwl_shm_dmabuf_sync(pixmap->dmabuf_fd,
++                             DMA_BUF_SYNC_END | DMA_BUF_SYNC_RW))
++        FatalError("Xwayland DRI3 linear: DMA-BUF SYNC_END: %s\n",
++                   strerror(errno));
++}
++
++struct xwl_shm_dri3_import {
++    struct wl_buffer *buffer;
++    Bool done;
++};
++
++static void
++xwl_shm_dri3_created(void *data, struct zwp_linux_buffer_params_v1 *params,
++                     struct wl_buffer *buffer)
++{
++    struct xwl_shm_dri3_import *import = data;
++
++    import->buffer = buffer;
++    import->done = TRUE;
++}
++
++static void
++xwl_shm_dri3_failed(void *data, struct zwp_linux_buffer_params_v1 *params)
++{
++    struct xwl_shm_dri3_import *import = data;
++
++    import->done = TRUE;
++}
++
++static const struct zwp_linux_buffer_params_v1_listener xwl_shm_dri3_params_listener = {
++    .created = xwl_shm_dri3_created,
++    .failed = xwl_shm_dri3_failed,
++};
++
++static struct wl_buffer *
++xwl_shm_dri3_create_buffer(ScreenPtr screen, int fd, int width, int height,
++                           uint32_t stride, uint32_t offset, uint32_t format)
++{
++    struct xwl_screen *xwl_screen = xwl_screen_get(screen);
++    struct xwl_shm_dri3 *dri3 = xwl_shm_dri3_get(screen);
++    struct xwl_shm_dri3_import import = { 0 };
++    struct zwp_linux_buffer_params_v1 *params;
++    struct zwp_linux_dmabuf_v1 *wrapper;
++    struct wl_event_queue *queue;
++
++    queue = wl_display_create_queue(xwl_screen->display);
++    if (!queue)
++        return NULL;
++    wrapper = wl_proxy_create_wrapper(dri3->dmabuf);
++    if (!wrapper) {
++        wl_event_queue_destroy(queue);
++        return NULL;
++    }
++    wl_proxy_set_queue((struct wl_proxy *) wrapper, queue);
++    params = zwp_linux_dmabuf_v1_create_params(wrapper);
++    wl_proxy_wrapper_destroy(wrapper);
++    if (!params) {
++        wl_event_queue_destroy(queue);
++        return NULL;
++    }
++    zwp_linux_buffer_params_v1_add_listener(params,
++                                            &xwl_shm_dri3_params_listener,
++                                            &import);
++    zwp_linux_buffer_params_v1_add(params, fd, 0, offset, stride, 0, 0);
++    /* Unlike create_immed, a failed import is not a fatal protocol error.
++     * Use a private queue so import cannot re-enter Present/window handlers.
++     * This round trip happens once per pixmap, not once per frame.
++     */
++    if (xwl_screen->prepare_read) {
++        wl_display_cancel_read(xwl_screen->display);
++        xwl_screen->prepare_read = 0;
++    }
++    xwl_screen->wait_flush = 0;
++    zwp_linux_buffer_params_v1_create(params, width, height, format, 0);
++    while (!import.done) {
++        if (wl_display_dispatch_queue(xwl_screen->display, queue) < 0)
++            break;
++    }
++    zwp_linux_buffer_params_v1_destroy(params);
++    if (import.buffer)
++        wl_proxy_set_queue((struct wl_proxy *) import.buffer, NULL);
++    wl_event_queue_destroy(queue);
++    return import.buffer;
++}
++
++static PixmapPtr
++xwl_shm_dri3_pixmap_from_fds(ScreenPtr screen, CARD8 num_fds, const int *fds,
++                             CARD16 width, CARD16 height,
++                             const CARD32 *strides, const CARD32 *offsets,
++                             CARD8 depth, CARD8 bpp, CARD64 modifier)
++{
++    struct xwl_shm_dri3 *dri3 = xwl_shm_dri3_get(screen);
++    struct xwl_pixmap *xwl_pixmap;
++    PixmapPtr pixmap;
++    uint32_t format;
++    uint64_t size;
++    off_t fd_size;
++
++    /* INVALID does not mean LINEAR. Refuse implicit layouts and UBWC. */
++    if (num_fds != 1 || !width || !height || width > 32767 || height > 32767 ||
++        (depth != 24 && depth != 32) || bpp != 32 ||
++        modifier != DRM_FORMAT_MOD_LINEAR || strides[0] < (uint32_t) width * 4 ||
++        strides[0] > INT32_MAX || strides[0] % 4 || offsets[0] % 4) {
++        ErrorF("Xwayland DRI3 linear: expected one explicit LINEAR 32-bpp plane\n");
++        return NULL;
++    }
++    format = depth == 32 ? DRM_FORMAT_ARGB8888 : DRM_FORMAT_XRGB8888;
++    if (!xwl_shm_dri3_has_format(dri3, format))
++        return NULL;
++    size = (uint64_t) offsets[0] + (uint64_t) strides[0] * height;
++    if (size > INT32_MAX)
++        return NULL;
++    fd_size = lseek(fds[0], 0, SEEK_END);
++    if (fd_size < 0 || (uint64_t) fd_size < size)
++        return NULL;
++    if (lseek(fds[0], 0, SEEK_SET) < 0)
++        return NULL;
++
++    pixmap = fbCreatePixmap(screen, 0, 0, depth, 0);
++    if (!pixmap)
++        return NULL;
++    xwl_pixmap = calloc(1, sizeof(*xwl_pixmap));
++    if (!xwl_pixmap)
++        goto err_pixmap;
++    xwl_pixmap->dmabuf_fd = fcntl(fds[0], F_DUPFD_CLOEXEC, 0);
++    if (xwl_pixmap->dmabuf_fd < 0)
++        goto err_private;
++    xwl_pixmap->offset = offsets[0];
++    xwl_pixmap->size = size;
++    xwl_pixmap->data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED,
++                             xwl_pixmap->dmabuf_fd, 0);
++    if (xwl_pixmap->data == MAP_FAILED)
++        goto err_fd;
++
++    /* Reject FDs without the CPU cache management required by fb fallback. */
++    if (!xwl_shm_dmabuf_sync(xwl_pixmap->dmabuf_fd,
++                             DMA_BUF_SYNC_START | DMA_BUF_SYNC_RW) ||
++        !xwl_shm_dmabuf_sync(xwl_pixmap->dmabuf_fd,
++                             DMA_BUF_SYNC_END | DMA_BUF_SYNC_RW)) {
++        ErrorF("Xwayland DRI3 linear: DMA-BUF CPU sync unavailable: %s\n",
++               strerror(errno));
++        goto err_map;
++    }
++    if (!screen->ModifyPixmapHeader(pixmap, width, height, depth, bpp,
++                                     strides[0],
++                                     (char *) xwl_pixmap->data + offsets[0]))
++        goto err_map;
++    xwl_pixmap->buffer = xwl_shm_dri3_create_buffer(screen, xwl_pixmap->dmabuf_fd,
++                                                   width, height, strides[0],
++                                                   offsets[0], format);
++    if (!xwl_pixmap->buffer) {
++        ErrorF("Xwayland DRI3 linear: compositor rejected DMA-BUF import\n");
++        goto err_map;
++    }
++    wl_buffer_add_listener(xwl_pixmap->buffer, &xwl_shm_buffer_listener, pixmap);
++    xwl_pixmap_set_private(pixmap, xwl_pixmap);
++    return pixmap;
++
++ err_map:
++    munmap(xwl_pixmap->data, xwl_pixmap->size);
++ err_fd:
++    close(xwl_pixmap->dmabuf_fd);
++ err_private:
++    free(xwl_pixmap);
++ err_pixmap:
++    fbDestroyPixmap(pixmap);
++    return NULL;
++}
++
++static int
++xwl_shm_dri3_fds_from_pixmap(ScreenPtr screen, PixmapPtr pixmap, int *fds,
++                             uint32_t *strides, uint32_t *offsets,
++                             uint64_t *modifier)
++{
++    struct xwl_pixmap *xwl_pixmap = xwl_pixmap_get(pixmap);
++
++    /* Never advertise an ordinary wl_shm/memfd pixmap as a DMA-BUF. */
++    if (!xwl_pixmap || xwl_pixmap->dmabuf_fd < 0)
++        return 0;
++    fds[0] = fcntl(xwl_pixmap->dmabuf_fd, F_DUPFD_CLOEXEC, 0);
++    if (fds[0] < 0)
++        return 0;
++    strides[0] = pixmap->devKind;
++    offsets[0] = xwl_pixmap->offset;
++    *modifier = DRM_FORMAT_MOD_LINEAR;
++    return 1;
++}
++
++static int
++xwl_shm_dri3_fd_from_pixmap(ScreenPtr screen, PixmapPtr pixmap,
++                            CARD16 *stride, CARD32 *size)
++{
++    struct xwl_pixmap *xwl_pixmap = xwl_pixmap_get(pixmap);
++
++    if (!xwl_pixmap || xwl_pixmap->dmabuf_fd < 0 || xwl_pixmap->offset ||
++        pixmap->devKind > UINT16_MAX)
++        return -1;
++    *stride = pixmap->devKind;
++    *size = xwl_pixmap->size;
++    return fcntl(xwl_pixmap->dmabuf_fd, F_DUPFD_CLOEXEC, 0);
++}
++
++static int
++xwl_shm_dri3_get_formats(ScreenPtr screen, CARD32 *num_formats, CARD32 **formats)
++{
++    struct xwl_shm_dri3 *dri3 = xwl_shm_dri3_get(screen);
++    CARD32 *result = malloc(2 * sizeof(*result));
++
++    *num_formats = 0;
++    *formats = NULL;
++    if (!result)
++        return FALSE;
++    if (dri3->xrgb8888)
++        result[(*num_formats)++] = DRM_FORMAT_XRGB8888;
++    if (dri3->argb8888)
++        result[(*num_formats)++] = DRM_FORMAT_ARGB8888;
++    *formats = result;
++    return TRUE;
++}
++
++static int
++xwl_shm_dri3_get_modifiers(ScreenPtr screen, uint32_t format,
++                           uint32_t *num_modifiers, uint64_t **modifiers)
++{
++    *num_modifiers = 0;
++    *modifiers = NULL;
++    if (!xwl_shm_dri3_has_format(xwl_shm_dri3_get(screen), format))
++        return TRUE;
++    *modifiers = malloc(sizeof(**modifiers));
++    if (!*modifiers)
++        return FALSE;
++    (*modifiers)[0] = DRM_FORMAT_MOD_LINEAR;
++    *num_modifiers = 1;
++    return TRUE;
++}
++
++static int
++xwl_shm_dri3_get_drawable_modifiers(DrawablePtr drawable, uint32_t format,
++                                    uint32_t *num_modifiers, uint64_t **modifiers)
++{
++    return xwl_shm_dri3_get_modifiers(drawable->pScreen, format,
++                                      num_modifiers, modifiers);
++}
++
++static int
++xwl_shm_dri3_open_client(ClientPtr client, ScreenPtr screen,
++                         RRProviderPtr provider, int *fd)
++{
++    /* This is an import bridge, not a DRM render node. Mesa Vulkan WSI can
++     * present without a DRI3 device FD; a KGSL FD is not a DRM FD.
++     */
++    *fd = -1;
++    return BadMatch;
++}
++
++static const dri3_screen_info_rec xwl_shm_dri3_info = {
++    .version = 2,
++    .open_client = xwl_shm_dri3_open_client,
++    .pixmap_from_fds = xwl_shm_dri3_pixmap_from_fds,
++    .fds_from_pixmap = xwl_shm_dri3_fds_from_pixmap,
++    .fd_from_pixmap = xwl_shm_dri3_fd_from_pixmap,
++    .get_formats = xwl_shm_dri3_get_formats,
++    .get_modifiers = xwl_shm_dri3_get_modifiers,
++    .get_drawable_modifiers = xwl_shm_dri3_get_drawable_modifiers,
++};
++#endif /* DRI3 && __linux__ */
++
++Bool
++xwl_shm_dri3_init(ScreenPtr screen)
++{
++#if defined(DRI3) && defined(__linux__)
++    struct xwl_screen *xwl_screen = xwl_screen_get(screen);
++    struct xwl_shm_dri3 *dri3;
++    struct wl_event_queue *queue;
++    struct wl_registry *registry;
++    FbScreenPrivPtr fb;
++    int ret;
++
++    if (!dixRegisterPrivateKey(&xwl_shm_dri3_private_key, PRIVATE_SCREEN, 0))
++        return FALSE;
++    dri3 = calloc(1, sizeof(*dri3));
++    if (!dri3)
++        return FALSE;
++    dixSetPrivate(&screen->devPrivates, &xwl_shm_dri3_private_key, dri3);
++    queue = wl_display_create_queue(xwl_screen->display);
++    if (!queue) {
++        xwl_shm_dri3_fini(screen);
++        return FALSE;
++    }
++    registry = wl_display_get_registry(xwl_screen->display);
++    if (!registry) {
++        wl_event_queue_destroy(queue);
++        xwl_shm_dri3_fini(screen);
++        return FALSE;
++    }
++    wl_proxy_set_queue((struct wl_proxy *) registry, queue);
++    wl_registry_add_listener(registry, &xwl_shm_dri3_registry_listener, dri3);
++    ret = wl_display_roundtrip_queue(xwl_screen->display, queue);
++    /* The bind generated by the registry callback needs its own round trip. */
++    if (ret >= 0 && dri3->dmabuf)
++        ret = wl_display_roundtrip_queue(xwl_screen->display, queue);
++    wl_registry_destroy(registry);
++    if (dri3->dmabuf)
++        wl_proxy_set_queue((struct wl_proxy *) dri3->dmabuf, NULL);
++    wl_event_queue_destroy(queue);
++    if (ret < 0) {
++        xwl_shm_dri3_fini(screen);
++        return FALSE;
++    }
++    if (!dri3->dmabuf || (!dri3->xrgb8888 && !dri3->argb8888)) {
++        xwl_shm_dri3_fini(screen);
++        return TRUE;
++    }
++    if (!dri3_screen_init(screen, &xwl_shm_dri3_info)) {
++        xwl_shm_dri3_fini(screen);
++        return FALSE;
++    }
++    fb = fbGetScreenPrivate(screen);
++    fb->prepareAccess = xwl_shm_dri3_prepare_access;
++    fb->finishAccess = xwl_shm_dri3_finish_access;
++    ErrorF("Xwayland: DRI3 linear DMA-BUF bridge enabled (linux-dmabuf v3)\n");
++#endif
++    return TRUE;
++}
++
++void
++xwl_shm_dri3_fini(ScreenPtr screen)
++{
++#if defined(DRI3) && defined(__linux__)
++    struct xwl_shm_dri3 *dri3;
++
++    if (!dixPrivateKeyRegistered(&xwl_shm_dri3_private_key))
++        return;
++    dri3 = xwl_shm_dri3_get(screen);
++    if (!dri3)
++        return;
++    if (dri3->dmabuf)
++        zwp_linux_dmabuf_v1_destroy(dri3->dmabuf);
++    dixSetPrivate(&screen->devPrivates, &xwl_shm_dri3_private_key, NULL);
++    free(dri3);
++#endif
++}
+diff --git a/hw/xwayland/xwayland-shm.h b/hw/xwayland/xwayland-shm.h
+index 3c94000b6..d8026fd2d 100644
+--- a/hw/xwayland/xwayland-shm.h
++++ b/hw/xwayland/xwayland-shm.h
+@@ -32,6 +32,9 @@
+ #include "scrnintstr.h"
+ #include "pixmapstr.h"
+ 
++Bool xwl_shm_dri3_init(ScreenPtr screen);
++void xwl_shm_dri3_fini(ScreenPtr screen);
++
+ Bool xwl_shm_create_screen_resources(ScreenPtr screen);
+ PixmapPtr xwl_shm_create_pixmap(ScreenPtr screen, int width, int height,
+                                 int depth, unsigned int hint);

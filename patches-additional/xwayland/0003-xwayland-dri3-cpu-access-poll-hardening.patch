@@ -1,0 +1,48 @@
+diff --git a/hw/xwayland/xwayland-shm.c b/hw/xwayland/xwayland-shm.c
+index a5c17e253..c88489425 100644
+--- a/hw/xwayland/xwayland-shm.c
++++ b/hw/xwayland/xwayland-shm.c
+@@ -507,12 +507,29 @@ xwl_shm_dri3_prepare_access(DrawablePtr drawable)
+      * These waits are only for CPU fallback, never for a Present flip.
+      */
+     pfd = (struct pollfd) { .fd = pixmap->dmabuf_fd, .events = POLLOUT };
+-    do {
+-        ret = poll(&pfd, 1, 5000);
+-    } while (ret < 0 && errno == EINTR);
+-    if (ret <= 0 || (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) ||
++    CARD32 start = GetTimeInMillis();
++    int timeout = 5000;
++
++    for (;;) {
++        ret = poll(&pfd, 1, timeout);
++        if (ret >= 0 || errno != EINTR)
++            break;
++        CARD32 elapsed = GetTimeInMillis() - start;
++        if (elapsed >= 5000) {
++            ret = 0;
++            break;
++        }
++        timeout = 5000 - elapsed;
++    }
++    if (ret < 0)
++        FatalError("Xwayland DRI3 linear: DMA-BUF CPU access poll: %s\n",
++                   strerror(errno));
++    if (ret == 0)
++        FatalError("Xwayland DRI3 linear: DMA-BUF CPU access timed out after 5000 ms\n");
++    if ((pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) ||
+         !(pfd.revents & POLLOUT))
+-        FatalError("Xwayland DRI3 linear: DMA-BUF CPU access wait failed\n");
++        FatalError("Xwayland DRI3 linear: DMA-BUF CPU access events 0x%x\n",
++                   (unsigned int) pfd.revents);
+     if (!xwl_shm_dmabuf_sync(pixmap->dmabuf_fd,
+                              DMA_BUF_SYNC_START | DMA_BUF_SYNC_RW))
+         FatalError("Xwayland DRI3 linear: DMA-BUF SYNC_START: %s\n",
+@@ -782,7 +799,7 @@ xwl_shm_dri3_init(ScreenPtr screen)
+     fb = fbGetScreenPrivate(screen);
+     fb->prepareAccess = xwl_shm_dri3_prepare_access;
+     fb->finishAccess = xwl_shm_dri3_finish_access;
+-    ErrorF("Xwayland: DRI3 linear DMA-BUF bridge v2 enabled (create_immed)\n");
++    ErrorF("Xwayland: DRI3 linear DMA-BUF bridge v2 + release-hardening-v1 enabled (create_immed)\n");
+ #endif
+     return TRUE;
+ }

@@ -990,7 +990,7 @@ diff --git a/render/gles2/shaders/tex_external.frag b/render/gles2/shaders/tex_e
 index 1f6d832f..07f5b021 100644
 --- a/render/gles2/shaders/tex_external.frag
 +++ b/render/gles2/shaders/tex_external.frag
-@@ -9,7 +9,13 @@ precision mediump float;
+@@ -9,7 +9,12 @@ precision mediump float;
  varying vec2 v_texcoord;
  uniform samplerExternalOES tex;
  uniform float alpha;
@@ -1004,4 +1004,3 @@ index 1f6d832f..07f5b021 100644
 +	}
 +	gl_FragColor = color * alpha;
  }
-+

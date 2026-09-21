@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+version="$(dpkg-parsechangelog -SVersion)"
+version="${version#*:}"
+version="${version%-*}"
+version="${version/\~/_}"
+
+git fetch origin refs/heads/upstream-unstable:refs/remotes/origin/upstream-unstable
+upstream_commit="$(git merge-base HEAD refs/remotes/origin/upstream-unstable)"
+git tag -f "upstream/$version" "$upstream_commit"

@@ -92,6 +92,24 @@
       "branch": "droidian",
       "apt_packages": [],
       "dependencies": []
+    },
+    {
+      "name": "xwayland",
+      "base": false,
+      "additional": true,
+      "repo": "https://salsa.debian.org/xorg-team/wayland/xwayland.git",
+      "branch": "debian/2%24.1.3-1",
+      "apt_packages": [],
+      "dependencies": []
+    },
+    {
+      "name": "marble-additional-files",
+      "base": false,
+      "additional": true,
+      "repo": "https://github.com/droidian-marble/marble-additional-files.git",
+      "branch": "master",
+      "apt_packages": [],
+      "dependencies": []
     }
   ]
 }

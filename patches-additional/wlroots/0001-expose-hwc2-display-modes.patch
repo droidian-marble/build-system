@@ -97,20 +97,24 @@ index 2d6214b9..48eb0162 100644
  	.close = hwcomposer2_close,
  };
 diff --git a/backend/hwcomposer/output.c b/backend/hwcomposer/output.c
-index 241df2a0..026c38d4 100644
+index 241df2a0..b0087858 100644
 --- a/backend/hwcomposer/output.c
 +++ b/backend/hwcomposer/output.c
-@@ -78,7 +78,41 @@ static bool output_commit(struct wlr_output *wlr_output,
+@@ -78,6 +78,56 @@ static bool output_commit(struct wlr_output *wlr_output,
  		return false;
  	}
  
--	if (state->committed & WLR_OUTPUT_STATE_ENABLED) {
 +
-+	if (state->committed & WLR_OUTPUT_STATE_MODE) {
++	if ((state->committed & WLR_OUTPUT_STATE_MODE) && output->hwc_mode_count > 0) {
 +		struct wlr_hwcomposer_mode *selected = NULL;
 +
 +		if (state->mode_type == WLR_OUTPUT_STATE_MODE_FIXED && state->mode) {
-+			selected = wl_container_of(state->mode, selected, wlr_mode);
++			for (size_t i = 0; i < output->hwc_mode_count; ++i) {
++				if (state->mode == &output->hwc_modes[i].wlr_mode) {
++					selected = &output->hwc_modes[i];
++					break;
++				}
++			}
 +		} else if (state->mode_type == WLR_OUTPUT_STATE_MODE_CUSTOM) {
 +			for (size_t i = 0; i < output->hwc_mode_count; ++i) {
 +				struct wlr_hwcomposer_mode *candidate = &output->hwc_modes[i];
@@ -127,7 +131,8 @@ index 241df2a0..026c38d4 100644
 +			wlr_log(WLR_ERROR, "output_commit: requested HWC mode not found");
 +			return false;
 +		}
-+		if (!hwc_backend->impl->set_mode || !hwc_backend->impl->set_mode(output, selected->hwc_config_id)) {
++		if (wlr_output->current_mode != &selected->wlr_mode &&
++				(!hwc_backend->impl->set_mode || !hwc_backend->impl->set_mode(output, selected->hwc_config_id))) {
 +			wlr_log(WLR_ERROR, "output_commit: failed to switch HWC config %u", selected->hwc_config_id);
 +			return false;
 +		}
@@ -136,14 +141,34 @@ index 241df2a0..026c38d4 100644
 +		output->frame_delay = 1000000 / MAX(1, selected->wlr_mode.refresh);
 +		if (output->hwc_is_primary)
 +			hwc_backend->hwc_device_refresh = selected->hwc_vsync_period;
-+		wlr_log(WLR_INFO, "output_commit: switched HWC config=%u %dx%d@%d mHz",
++		wlr_log(WLR_INFO, "output_commit: selected HWC config=%u %dx%d@%d mHz",
 +			selected->hwc_config_id, selected->wlr_mode.width, selected->wlr_mode.height, selected->wlr_mode.refresh);
++	} else if (state->committed & WLR_OUTPUT_STATE_MODE) {
++		/* HWC without mode enumeration can retain its native custom mode. */
++		if (state->mode_type != WLR_OUTPUT_STATE_MODE_CUSTOM ||
++				state->custom_mode.width != output->hwc_width ||
++				state->custom_mode.height != output->hwc_height ||
++				(state->custom_mode.refresh != 0 &&
++				state->custom_mode.refresh != wlr_output->refresh)) {
++			wlr_log(WLR_ERROR, "output_commit: HWC has no matching native mode");
++			return false;
++		}
 +	}
-+if (state->committed & WLR_OUTPUT_STATE_ENABLED) {
+ 	if (state->committed & WLR_OUTPUT_STATE_ENABLED) {
  		wlr_log(WLR_DEBUG, "output_commit: STATE_ENABLE, pending state %d", state->enabled);
  		if (!hwc_backend->impl->set_power_mode(output, state->enabled)) {
- 			wlr_log(WLR_ERROR, "output_commit: unable to change display power mode");
-@@ -251,6 +285,20 @@ struct wlr_output *wlr_hwcomposer_add_output(struct wlr_backend *wlr_backend,
+@@ -232,6 +282,10 @@ struct wlr_output *wlr_hwcomposer_add_output(struct wlr_backend *wlr_backend,
+ 		(struct wlr_hwcomposer_backend *)wlr_backend;
+ 
+ 	struct wlr_hwcomposer_output *output = hwc_backend->impl->add_output(hwc_backend, display);
++	if (output == NULL) {
++		wlr_log(WLR_ERROR, "Failed to create HWC output");
++		return NULL;
++	}
+ 	output->hwc_backend = hwc_backend;
+ 	struct wlr_output *wlr_output = &output->wlr_output;
+ 	wl_list_insert(&hwc_backend->outputs, &output->link);
+@@ -251,6 +305,20 @@ struct wlr_output *wlr_hwcomposer_add_output(struct wlr_backend *wlr_backend,
  	wlr_output_init(&output->wlr_output, &hwc_backend->backend, &output_impl,
  					hwc_backend->display, &state);
  	wlr_output_state_finish(&state);

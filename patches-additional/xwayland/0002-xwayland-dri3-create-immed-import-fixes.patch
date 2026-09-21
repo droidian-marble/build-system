@@ -1,0 +1,178 @@
+diff --git a/dri3/dri3.c b/dri3/dri3.c
+index f9c517277..867538fa9 100644
+--- a/dri3/dri3.c
++++ b/dri3/dri3.c
+@@ -116,15 +116,15 @@ bail:
+ uint32_t
+ drm_format_for_depth(uint32_t depth, uint32_t bpp)
+ {
+-    switch (bpp) {
++    switch (depth) {
+         case 16:
+-            return DRM_FORMAT_RGB565;
++            return bpp == 16 ? DRM_FORMAT_RGB565 : 0;
+         case 24:
+-            return DRM_FORMAT_XRGB8888;
++            return bpp == 32 ? DRM_FORMAT_XRGB8888 : 0;
+         case 30:
+-            return DRM_FORMAT_XRGB2101010;
++            return bpp == 32 ? DRM_FORMAT_XRGB2101010 : 0;
+         case 32:
+-            return DRM_FORMAT_ARGB8888;
++            return bpp == 32 ? DRM_FORMAT_ARGB8888 : 0;
+         default:
+             return 0;
+     }
+diff --git a/hw/xwayland/xwayland-screen.c b/hw/xwayland/xwayland-screen.c
+index bedfe287f..c6774f48c 100644
+--- a/hw/xwayland/xwayland-screen.c
++++ b/hw/xwayland/xwayland-screen.c
+@@ -584,13 +584,11 @@ xwl_read_events (struct xwl_screen *xwl_screen)
+     if (xwl_screen->wait_flush)
+         return;
+ 
+-    /* A private-queue import may already have read and queued these events. */
+-    if (xwl_screen->prepare_read) {
+-        ret = wl_display_read_events(xwl_screen->display);
+-        if (ret == -1)
+-            xwl_give_up("failed to read Wayland events: %s\n", strerror(errno));
+-        xwl_screen->prepare_read = 0;
+-    }
++    ret = wl_display_read_events(xwl_screen->display);
++    if (ret == -1)
++        xwl_give_up("failed to read Wayland events: %s\n", strerror(errno));
++
++    xwl_screen->prepare_read = 0;
+ 
+     ret = wl_display_dispatch_pending(xwl_screen->display);
+     if (ret == -1)
+diff --git a/hw/xwayland/xwayland-shm.c b/hw/xwayland/xwayland-shm.c
+index 3efc1778a..a5c17e253 100644
+--- a/hw/xwayland/xwayland-shm.c
++++ b/hw/xwayland/xwayland-shm.c
+@@ -535,83 +535,24 @@ xwl_shm_dri3_finish_access(DrawablePtr drawable)
+                    strerror(errno));
+ }
+ 
+-struct xwl_shm_dri3_import {
+-    struct wl_buffer *buffer;
+-    Bool done;
+-};
+-
+-static void
+-xwl_shm_dri3_created(void *data, struct zwp_linux_buffer_params_v1 *params,
+-                     struct wl_buffer *buffer)
+-{
+-    struct xwl_shm_dri3_import *import = data;
+-
+-    import->buffer = buffer;
+-    import->done = TRUE;
+-}
+-
+-static void
+-xwl_shm_dri3_failed(void *data, struct zwp_linux_buffer_params_v1 *params)
+-{
+-    struct xwl_shm_dri3_import *import = data;
+-
+-    import->done = TRUE;
+-}
+-
+-static const struct zwp_linux_buffer_params_v1_listener xwl_shm_dri3_params_listener = {
+-    .created = xwl_shm_dri3_created,
+-    .failed = xwl_shm_dri3_failed,
+-};
+-
+ static struct wl_buffer *
+ xwl_shm_dri3_create_buffer(ScreenPtr screen, int fd, int width, int height,
+                            uint32_t stride, uint32_t offset, uint32_t format)
+ {
+-    struct xwl_screen *xwl_screen = xwl_screen_get(screen);
+     struct xwl_shm_dri3 *dri3 = xwl_shm_dri3_get(screen);
+-    struct xwl_shm_dri3_import import = { 0 };
+     struct zwp_linux_buffer_params_v1 *params;
+-    struct zwp_linux_dmabuf_v1 *wrapper;
+-    struct wl_event_queue *queue;
++    struct wl_buffer *buffer;
+ 
+-    queue = wl_display_create_queue(xwl_screen->display);
+-    if (!queue)
++    params = zwp_linux_dmabuf_v1_create_params(dri3->dmabuf);
++    if (!params)
+         return NULL;
+-    wrapper = wl_proxy_create_wrapper(dri3->dmabuf);
+-    if (!wrapper) {
+-        wl_event_queue_destroy(queue);
+-        return NULL;
+-    }
+-    wl_proxy_set_queue((struct wl_proxy *) wrapper, queue);
+-    params = zwp_linux_dmabuf_v1_create_params(wrapper);
+-    wl_proxy_wrapper_destroy(wrapper);
+-    if (!params) {
+-        wl_event_queue_destroy(queue);
+-        return NULL;
+-    }
+-    zwp_linux_buffer_params_v1_add_listener(params,
+-                                            &xwl_shm_dri3_params_listener,
+-                                            &import);
+     zwp_linux_buffer_params_v1_add(params, fd, 0, offset, stride, 0, 0);
+-    /* Unlike create_immed, a failed import is not a fatal protocol error.
+-     * Use a private queue so import cannot re-enter Present/window handlers.
+-     * This round trip happens once per pixmap, not once per frame.
++    /* Like the GBM backend, do not wait for the compositor in an X request.
++     * The compositor's XWM may itself be waiting for an X reply.
+      */
+-    if (xwl_screen->prepare_read) {
+-        wl_display_cancel_read(xwl_screen->display);
+-        xwl_screen->prepare_read = 0;
+-    }
+-    xwl_screen->wait_flush = 0;
+-    zwp_linux_buffer_params_v1_create(params, width, height, format, 0);
+-    while (!import.done) {
+-        if (wl_display_dispatch_queue(xwl_screen->display, queue) < 0)
+-            break;
+-    }
++    buffer = zwp_linux_buffer_params_v1_create_immed(params, width, height, format, 0);
+     zwp_linux_buffer_params_v1_destroy(params);
+-    if (import.buffer)
+-        wl_proxy_set_queue((struct wl_proxy *) import.buffer, NULL);
+-    wl_event_queue_destroy(queue);
+-    return import.buffer;
++    return buffer;
+ }
+ 
+ static PixmapPtr
+@@ -663,15 +604,7 @@ xwl_shm_dri3_pixmap_from_fds(ScreenPtr screen, CARD8 num_fds, const int *fds,
+     if (xwl_pixmap->data == MAP_FAILED)
+         goto err_fd;
+ 
+-    /* Reject FDs without the CPU cache management required by fb fallback. */
+-    if (!xwl_shm_dmabuf_sync(xwl_pixmap->dmabuf_fd,
+-                             DMA_BUF_SYNC_START | DMA_BUF_SYNC_RW) ||
+-        !xwl_shm_dmabuf_sync(xwl_pixmap->dmabuf_fd,
+-                             DMA_BUF_SYNC_END | DMA_BUF_SYNC_RW)) {
+-        ErrorF("Xwayland DRI3 linear: DMA-BUF CPU sync unavailable: %s\n",
+-               strerror(errno));
+-        goto err_map;
+-    }
++    /* Only the fb access hooks need CPU cache synchronization. */
+     if (!screen->ModifyPixmapHeader(pixmap, width, height, depth, bpp,
+                                      strides[0],
+                                      (char *) xwl_pixmap->data + offsets[0]))
+@@ -680,7 +613,7 @@ xwl_shm_dri3_pixmap_from_fds(ScreenPtr screen, CARD8 num_fds, const int *fds,
+                                                    width, height, strides[0],
+                                                    offsets[0], format);
+     if (!xwl_pixmap->buffer) {
+-        ErrorF("Xwayland DRI3 linear: compositor rejected DMA-BUF import\n");
++        ErrorF("Xwayland DRI3 linear: failed to allocate wl_buffer proxy\n");
+         goto err_map;
+     }
+     wl_buffer_add_listener(xwl_pixmap->buffer, &xwl_shm_buffer_listener, pixmap);
+@@ -849,7 +782,7 @@ xwl_shm_dri3_init(ScreenPtr screen)
+     fb = fbGetScreenPrivate(screen);
+     fb->prepareAccess = xwl_shm_dri3_prepare_access;
+     fb->finishAccess = xwl_shm_dri3_finish_access;
+-    ErrorF("Xwayland: DRI3 linear DMA-BUF bridge enabled (linux-dmabuf v3)\n");
++    ErrorF("Xwayland: DRI3 linear DMA-BUF bridge v2 enabled (create_immed)\n");
+ #endif
+     return TRUE;
+ }
