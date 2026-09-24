@@ -1,26 +1,5 @@
 Package: flatpak-extension-gl-hybris-dbgsym
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
-Auto-Built-Package: debug-symbols
-Priority: optional
-Section: debug
-Source: libhybris
-Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 5730
-Depends: flatpak-extension-gl-hybris (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Filename: pool/additional/flatpak-extension-gl-hybris-dbgsym_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 3720848
-MD5sum: 724866c63464673eba93b8eef110c0f9
-SHA1: 800b081870e9c0e8077fd65bf97fe8edfb23f5b1
-SHA256: f02464f222eead2a60b27766729ca39ee387b8793127d08fbadbb093bed08d0e
-SHA512: 57492af6b8dda8af081f0c9dcad89505f78eab6c8b3f8ee6940ac34be5b8ee562eab8038232240040e503d477efd6239aa0e4ff75e2e27995a4777e127a3df30
-Description: debug symbols for flatpak-extension-gl-hybris
-Build-Ids: 006a4e038fc1ce18e970ae44cbd595ee4189b9e7 28ed07ae36ff3cb1482814a3a3844e07b45b47e6 298426174b9454146d987a1ff08985b85342c400 2d40e4047daec6a028778ad3a47effa6e6d7cde8 337aca135f125107de424d033c1141fb17d517f8 3779cc4bcea5ae84c57aea0f9c4ca50269597512 393fef22990a1872b90ccc5b1124aa00c70d8c35 44d5ad30b93dc0f06bedd45d4ddcce4d544747c5 49e8f9644373b9a85e5c96590e8c60a7c10dab40 4a44fc1d0f034a45219ccf263cd054ab1e74c23c 5210b2db34842b2426a70739cb9a07ea143181ca 624909d80657fa35bc6b830d1fb3df0dbc9b9a7e 64ff78d86046c47d2145dfdaa4042474eca41335 695e1c8a4602bca23882822f82940951a954a9a5 6f9ba8a071cc1894995ddb06e4d2c30edd94313e 713e4e09648e116ec0204e3e06ec2c7690cb27b1 719efd4d1e6d942303e37f60affe2f09087b807e 74091dbc4c95c3248970689d18bd2c718b168f06 758422882ebd5395357d4b88751d0030c2745804 7bf2b58b6b706459c5de5266c2e43d6cb4f20196 881f0e88b4a3c195a91237a9301b0552678ae8ec 8d485337c608677544b395d011f241e0b30bb2cd a06e278af0dcf9ec7c9c542745e6d66bff2c9fbd a2a0d406e1d9b7cbc3e38fe0beabf68818494c1f a67836e4119aeb960899fc9caf93fa3d51469e8d a7324b1e11e743d031bc615065624ff85b63fa4c a7d5ac611971f3c5743e603dd85beb3938a6ded0 ba2d0c99e54e12c5cb6a6a7dcfb519b5d74d1c4f d55416a5f1b73994feab26a340d7f78e0ad429a4 da5d3644d71f7898206b813180ff3269d7ec73e5 e152de58d32316b2e8f87ef63dd8c5024742654e e8b6d4d935b6482547c04c7d33fd0afa9a3754b5
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
-X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
-
-Package: flatpak-extension-gl-hybris-dbgsym
-Architecture: arm64
 Version: 0.0.5.53-1+droidian1+git20260921172954.01d02c8.next.lindroid.drm
 Auto-Built-Package: debug-symbols
 Priority: optional
@@ -40,30 +19,25 @@ Build-Ids: 006a4e038fc1ce18e970ae44cbd595ee4189b9e7 28ed07ae36ff3cb1482814a3a384
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: flatpak-extension-gl-hybris
+Package: flatpak-extension-gl-hybris-dbgsym
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
+Auto-Built-Package: debug-symbols
 Priority: optional
-Section: libs
+Section: debug
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 3455
-Depends: libhybris (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm), libhybris-common1, libhardware2 (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Recommends: flatpak-hybris
-Filename: pool/additional/flatpak-extension-gl-hybris_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 394276
-MD5sum: f7bae1246358353998e418cee0817756
-SHA1: 2a573548f9a3697c92ac549261867f2eba8a39c5
-SHA256: 6c2684bf3d317abd3579237662fd8dd710eee451dbbe53cb460c3a6fad150cb4
-SHA512: c5c61f539fe33736fd2884fe83385518a697e7c0e4ec6877c0e77c13fb943eaa66889696d96fe4c8fd691c80ea7f0853c11fe497e2848724991535f486ec410b
-Description: libhybris extension for the org.freedesktop.Platform.GL runtime
- This package contains all of the libhybris libraries, shipped as an
- extension of the org.freedesktop.Platform.GL.
- .
- This allows usage of libhybris inside flatpaks as well. Note that installing
- this package won't enable the extension automatically.
- Check the flatpak-hybris package for more details.
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 5730
+Depends: flatpak-extension-gl-hybris (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Filename: pool/additional/flatpak-extension-gl-hybris-dbgsym_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 3720884
+MD5sum: d1abf54921079d068e5c54aaa3e8c8eb
+SHA1: c9eb78f3d5491d96b413870cfcbd276d68f2f957
+SHA256: 0488b6c44881f42d9c8d97b2c5d84cff4aaf7ca751e85ba811de2c8da1ba319e
+SHA512: d081e356af2132b0149a237e382d01a09ffb2a2f315180d230d7a86b0abe1a6196b7a22eb7fdc6ae47aaf9dbd347aa052bd49222fe7ee2ad8e5437d6e35ed89c
+Description: debug symbols for flatpak-extension-gl-hybris
+Build-Ids: 006a4e038fc1ce18e970ae44cbd595ee4189b9e7 28ed07ae36ff3cb1482814a3a3844e07b45b47e6 298426174b9454146d987a1ff08985b85342c400 2d40e4047daec6a028778ad3a47effa6e6d7cde8 337aca135f125107de424d033c1141fb17d517f8 3779cc4bcea5ae84c57aea0f9c4ca50269597512 393fef22990a1872b90ccc5b1124aa00c70d8c35 44d5ad30b93dc0f06bedd45d4ddcce4d544747c5 49e8f9644373b9a85e5c96590e8c60a7c10dab40 4a44fc1d0f034a45219ccf263cd054ab1e74c23c 5210b2db34842b2426a70739cb9a07ea143181ca 624909d80657fa35bc6b830d1fb3df0dbc9b9a7e 64ff78d86046c47d2145dfdaa4042474eca41335 695e1c8a4602bca23882822f82940951a954a9a5 6f9ba8a071cc1894995ddb06e4d2c30edd94313e 713e4e09648e116ec0204e3e06ec2c7690cb27b1 719efd4d1e6d942303e37f60affe2f09087b807e 74091dbc4c95c3248970689d18bd2c718b168f06 758422882ebd5395357d4b88751d0030c2745804 7bf2b58b6b706459c5de5266c2e43d6cb4f20196 881f0e88b4a3c195a91237a9301b0552678ae8ec 8d485337c608677544b395d011f241e0b30bb2cd a06e278af0dcf9ec7c9c542745e6d66bff2c9fbd a2a0d406e1d9b7cbc3e38fe0beabf68818494c1f a67836e4119aeb960899fc9caf93fa3d51469e8d a7324b1e11e743d031bc615065624ff85b63fa4c a7d5ac611971f3c5743e603dd85beb3938a6ded0 ba2d0c99e54e12c5cb6a6a7dcfb519b5d74d1c4f d55416a5f1b73994feab26a340d7f78e0ad429a4 da5d3644d71f7898206b813180ff3269d7ec73e5 e152de58d32316b2e8f87ef63dd8c5024742654e e8b6d4d935b6482547c04c7d33fd0afa9a3754b5
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: flatpak-extension-gl-hybris
@@ -92,25 +66,30 @@ Description: libhybris extension for the org.freedesktop.Platform.GL runtime
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libandroid-properties-dev
+Package: flatpak-extension-gl-hybris
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
 Priority: optional
-Section: libdevel
+Section: libs
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 36
-Depends: libandroid-properties1 (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Filename: pool/additional/libandroid-properties-dev_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 6220
-MD5sum: 14909121c386bb3b948831ef5a300ced
-SHA1: 94f25f1419dd80e1c94573576d45442040b21dc0
-SHA256: 20bf683281924e8e55c86e14623d267644ee4dfbf31d1ce4bd3278b79dceb1fa
-SHA512: 10389bc910c2c28823725e4476c77480bea8ddd0a9db13d3ab87ad38d27d93d2a2ab2f1beb1f8142ea53cc43caa2875b6ca3d8f0a5d2b6075cf8092cab43ebf9
-Description: Development headers files for libandroid-properties
- Contains the development files for use in applications that wants to get,
- set or list the Android properties.
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 3455
+Depends: libhybris (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm), libhybris-common1, libhardware2 (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Recommends: flatpak-hybris
+Filename: pool/additional/flatpak-extension-gl-hybris_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 394232
+MD5sum: 14aa602395ef88ae6529f17445239229
+SHA1: 7219905c6a03445edb77e107f11955678eaabd55
+SHA256: 5920227e070767def3a2c8f269c34748ec23cde7be79a598cfce5ec9042a2736
+SHA512: bf8cfbd46a6fc66c8f7b06309b97d82165d52256e4638d8b32860841733ff24f6917ab54f5b0eb0b9512c41d44e6e6d268b0b98c35941cdd3b1a66a3d5f2387b
+Description: libhybris extension for the org.freedesktop.Platform.GL runtime
+ This package contains all of the libhybris libraries, shipped as an
+ extension of the org.freedesktop.Platform.GL.
+ .
+ This allows usage of libhybris inside flatpaks as well. Note that installing
+ this package won't enable the extension automatically.
+ Check the flatpak-hybris package for more details.
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libandroid-properties-dev
@@ -134,25 +113,25 @@ Description: Development headers files for libandroid-properties
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libandroid-properties1-dbgsym
+Package: libandroid-properties-dev
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
-Auto-Built-Package: debug-symbols
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
 Priority: optional
-Section: debug
+Section: libdevel
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 23
-Depends: libandroid-properties1 (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Filename: pool/additional/libandroid-properties1-dbgsym_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 5804
-MD5sum: 91bbb4a39a72338c71259c1ab67ab418
-SHA1: 05d5825b1728acbc4ba4e1bba1ac8805e3e7f5ff
-SHA256: 07c51f91c8934b6a4f5451e4a8d3f6a9f1bc4f50fb991d435748cc4b450c07b0
-SHA512: 80771a63f8836b6d923a92d82e9b795156388abb604a29b9f305d6778adc94d615255a3d631eeeb2f38c8accf22d7195d4e4d01ce7a3736676f4a0269aa3adfa
-Description: debug symbols for libandroid-properties1
-Build-Ids: 0ddf80bc61f5f49e64bc50b175a284d21e45fac3
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 36
+Depends: libandroid-properties1 (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Filename: pool/additional/libandroid-properties-dev_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 6228
+MD5sum: ccda810c92430b26121c49fbe963b670
+SHA1: d4431fa597af93faab6a287b68172c586e67402e
+SHA256: 40d52074095dacf398fee40826bf560794e3ab518c679a3db7d65314c5b46cf4
+SHA512: 2ef94891534ed058248b7cd7aaf6de64b1821d9aa5c77284a02aed3e08a7bc2f5d8da7bb8106d0968fc814b29a33c551d7b47ce650340b40bd6424d5698630a4
+Description: Development headers files for libandroid-properties
+ Contains the development files for use in applications that wants to get,
+ set or list the Android properties.
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libandroid-properties1-dbgsym
@@ -176,26 +155,25 @@ Build-Ids: 0ddf80bc61f5f49e64bc50b175a284d21e45fac3
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libandroid-properties1
+Package: libandroid-properties1-dbgsym
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
+Auto-Built-Package: debug-symbols
 Priority: optional
-Section: libs
+Section: debug
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 98
-Depends: libc6 (>= 2.17), libhybris-common1 (>= 0.0.5.53)
-Filename: pool/additional/libandroid-properties1_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 7664
-MD5sum: 2c14d57b885a4a4ee0f86f8be070a54e
-SHA1: eb7e6f0965096e3522a84a4420f5285889250097
-SHA256: 529f438dc86ca3d4d200a67df5e6c7ce426bc42e468a508a1140062233db18fb
-SHA512: 12319db1159ed184de4a4c519f2a5723442831737c6510acb76774e692fd34acaa15e136c9e6fefb6a77a890695798d92560a6eb80a3964492de09cb7deffade
-Description: Library to provide access to get, set and list Android properties
- Contains a library that provides access to get, set and list Android
- properties, which can be used by any Ubuntu app that needs to probe
- for properties (gps, modem, device specifics).
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 23
+Depends: libandroid-properties1 (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Filename: pool/additional/libandroid-properties1-dbgsym_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 5804
+MD5sum: b4c395ebc759766b31d7083e72fa6162
+SHA1: 974d6b95719d53d435e268dd67e0b283c826efc4
+SHA256: 60253b78f48646cc07a50e6100d7e22553932e575f5bd5c5a8a1a9f1f9ce24ea
+SHA512: f7ce9a9966175f1fb06027d725c7d0a54a11b2db2e9e7db2bb019b42d53dbb8908b979c0bf0a61bfc780e0bc1b3351b0208a1e9a4b4107251275d0cf640d56f4
+Description: debug symbols for libandroid-properties1
+Build-Ids: 0ddf80bc61f5f49e64bc50b175a284d21e45fac3
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libandroid-properties1
@@ -220,29 +198,26 @@ Description: Library to provide access to get, set and list Android properties
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libhardware-dev
+Package: libandroid-properties1
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
 Priority: optional
-Section: libdevel
+Section: libs
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 31
-Depends: android-headers, libhardware2 (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Filename: pool/additional/libhardware-dev_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 5732
-MD5sum: 73de10824e2ceb2637a3491283211399
-SHA1: a422bcbadea62a4f48a0df7cd07eba25694a91b3
-SHA256: 2d4f28295674818842a795b51ccc66f1cdad4213740c59332b23774fc881d3d1
-SHA512: 606087f7e749b4e832cce36cbd02e8f9ea14b854251ac9d76f1af9858b3b6eb8d8d96f0c9be39c85107afb7fd66a05d5b26edb304872dd3a9e97653d9e415ce7
-Description: Development files for libhardware
- Contains the development files for the Android libhardware HAL, which can
- be used to access a wide range of other HALs, such as audio, power,
- gralloc, etc.
- .
- Hybris is a solution that allows the use of bionic-based HW adaptations in
- glibc systems.
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 98
+Depends: libc6 (>= 2.17), libhybris-common1 (>= 0.0.5.53)
+Filename: pool/additional/libandroid-properties1_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 7664
+MD5sum: a81f64220ab0768fac8698c34ef31d5d
+SHA1: 9dba8db2dce30b154e7456ee54a68d0409a7e0cb
+SHA256: f2b81151fd0dc5bfaa0887dce4b21bb162c04703de28f95dbeccc44b5197940d
+SHA512: eeeb1841e3ace431546e56f9d367c30344a44addf68d141719146e0c30ceebb5944c5d0ce3e241044d3608edeab306c4f2b53cd928f300fb9d225ca418fcf9c3
+Description: Library to provide access to get, set and list Android properties
+ Contains a library that provides access to get, set and list Android
+ properties, which can be used by any Ubuntu app that needs to probe
+ for properties (gps, modem, device specifics).
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libhardware-dev
@@ -270,25 +245,29 @@ Description: Development files for libhardware
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libhardware2-dbgsym
+Package: libhardware-dev
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
-Auto-Built-Package: debug-symbols
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
 Priority: optional
-Section: debug
+Section: libdevel
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 20
-Depends: libhardware2 (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Filename: pool/additional/libhardware2-dbgsym_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 4400
-MD5sum: 1402f770a2858c9f544b8b95ba940daf
-SHA1: d9421c175bc426af406d535739c6b1edec60643c
-SHA256: 1ff69d86eadce3a13197badb47f0440c95f99ba78ce0920bcf2b2a0a7284452a
-SHA512: 3c52675cc2df029bfbe625f1c4479120df50d273e8d121d75279fa9dcf51e40d5d6d68f1c722e007654a87084cb0e4365983747d2109a1611d3ee3dee8d5d5a3
-Description: debug symbols for libhardware2
-Build-Ids: 44d5ad30b93dc0f06bedd45d4ddcce4d544747c5
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 31
+Depends: android-headers, libhardware2 (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Filename: pool/additional/libhardware-dev_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 5724
+MD5sum: 070758e2688b3e2ff439d1900a5ba125
+SHA1: 31fde16a8cb8778c1032c8acfe5ebd1108dc653c
+SHA256: dce65dd1080e0664fb4058f374932c5b02560d150224c4bd36f16ac7e2c2892d
+SHA512: 8f7e9bdf300f696a2a25547f77ac7d02a913d0d19b28150f39f1350f0321804123462ad36eedbcf4c8e6363b509e2b08d9eb58476d6f63c07e7c28b1a3493c68
+Description: Development files for libhardware
+ Contains the development files for the Android libhardware HAL, which can
+ be used to access a wide range of other HALs, such as audio, power,
+ gralloc, etc.
+ .
+ Hybris is a solution that allows the use of bionic-based HW adaptations in
+ glibc systems.
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libhardware2-dbgsym
@@ -312,29 +291,25 @@ Build-Ids: 44d5ad30b93dc0f06bedd45d4ddcce4d544747c5
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libhardware2
+Package: libhardware2-dbgsym
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
+Auto-Built-Package: debug-symbols
 Priority: optional
-Section: libs
+Section: debug
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 97
-Depends: libhybris-common1 (>= 0.0.5.53)
-Filename: pool/additional/libhardware2_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 7300
-MD5sum: 85959a0d5cebbf8173aaaeaae74891d1
-SHA1: 6361f7b6594b580573f3ecd808926881045694e1
-SHA256: 02269e86e284af47389ad8889efdb501bd737eab6e3a07fa8855b132accb3cab
-SHA512: d1e58e85009a0162396c8db954816af4a3457026ee627dd11ce601d991df0f0970afb762f8789eda6dbbdffa50a2c6d26f9d9bc4233f90544dc8d688d5713acf
-Description: Library to provide access to the Android libhardware HAL
- Contains a library that provides access to the Android libhardware HAL,
- which can be used to access a wide range of other HALs, such as audio,
- power, gralloc, etc.
- .
- Hybris is a solution that allows the use of bionic-based HW adaptations in
- glibc systems.
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 20
+Depends: libhardware2 (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Filename: pool/additional/libhardware2-dbgsym_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 4400
+MD5sum: 6fda6f7dd2b4994a89282da8ea51279a
+SHA1: 2ea744b845c10b1c194f0809a2637e7bfe39887b
+SHA256: c369d718712b8d1e46168cf704c2b62968a2b8150a086e4345ced5f2a12fbb83
+SHA512: 0743912cf97fb0a160f31ce2c78c5fcf0a211f9f3b32df716f5596b02400cbe87319b25ddc630ad296b9c1ec7d287ca80cf279dc771ab86a99c366e0470a0c1c
+Description: debug symbols for libhardware2
+Build-Ids: 44d5ad30b93dc0f06bedd45d4ddcce4d544747c5
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libhardware2
@@ -362,29 +337,29 @@ Description: Library to provide access to the Android libhardware HAL
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libhybris-common-dev
+Package: libhardware2
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
 Priority: optional
-Section: libdevel
+Section: libs
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 29
-Depends: libhybris-common1 (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Filename: pool/additional/libhybris-common-dev_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 5496
-MD5sum: 909ea6e8f3980acaede244bdbc2a4f38
-SHA1: be3ad1b519aa283128de84e67d0864e7582e7f32
-SHA256: 1a2aaed7734d4f2880112420123057b50165416b1c29ba422306499f10dd71af
-SHA512: ffb34ebbada01fe2ffcfcf65d72f980ad17b69b2d7847383dc9ec20add71e86db65e3d99a3e235b30d880ecbdb9cb086c5bc5c25946fb002a949ea557c66937e
-Description: Development files for libhybris-common
- Contains the development files for the common library that contains the
- Android linker, used to dynamically load and use symbols from Android
- based libraries.
+Installed-Size: 97
+Depends: libhybris-common1 (>= 0.0.5.53)
+Filename: pool/additional/libhardware2_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 7308
+MD5sum: 211799de620bfd20f1da9b64d1951f7f
+SHA1: 641b8a70a9f4f13faa141e7eade3b96495fdf890
+SHA256: 89f423e5caf1529cdfe84de0e455a1d7791a7dcc3921685d642a76c59727e9a0
+SHA512: dcc92c315e886a5842254f6f97d5873609efc07565d6e867986dec8315dee26950a057c554878cfcb597eef91aecf4933e0461e8d7859f55fe28ada370ea52ea
+Description: Library to provide access to the Android libhardware HAL
+ Contains a library that provides access to the Android libhardware HAL,
+ which can be used to access a wide range of other HALs, such as audio,
+ power, gralloc, etc.
  .
  Hybris is a solution that allows the use of bionic-based HW adaptations in
  glibc systems.
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libhybris-common-dev
@@ -412,25 +387,29 @@ Description: Development files for libhybris-common
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libhybris-common1-dbgsym
+Package: libhybris-common-dev
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
-Auto-Built-Package: debug-symbols
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
 Priority: optional
-Section: debug
+Section: libdevel
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 3931
-Depends: libhybris-common1 (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Filename: pool/additional/libhybris-common1-dbgsym_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 2971268
-MD5sum: 8dc9e4c751a572cbce92ba1579d7b4ff
-SHA1: c6b4cb07f04b26caef00d569820cb6b30de629b1
-SHA256: a3678b35de0b93bed1a9370c1e1ea2832cf5354e7b86d23a8eabba119d544d1d
-SHA512: 8925c8b0b43210561429c5f3398ee890c29dc7195bdfb22055f19d43fe5af30e8c699e9be0844ece0b0db5ed5b5d536510d4ac0d9f83f30564374be552f394dc
-Description: debug symbols for libhybris-common1
-Build-Ids: 337aca135f125107de424d033c1141fb17d517f8 713e4e09648e116ec0204e3e06ec2c7690cb27b1 881f0e88b4a3c195a91237a9301b0552678ae8ec 8d485337c608677544b395d011f241e0b30bb2cd ba2d0c99e54e12c5cb6a6a7dcfb519b5d74d1c4f
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 29
+Depends: libhybris-common1 (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Filename: pool/additional/libhybris-common-dev_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 5500
+MD5sum: eb4bcecece11dba707e7ba59c91bef0a
+SHA1: 2c0a95fb0fa8c325f075388aa349f57d5bfe2701
+SHA256: 909cd51cfda44ab57927091154caecd0aa1e84107a2ec1cee9b38650f741b830
+SHA512: 99f7d7f9f027f03abb2b9002d12c2e318f3cce8dd95987065177f1000f52ba8aaa010e08f36154edbdab30f670da260e8e51c1130f0bbc9cbf944af85fabb787
+Description: Development files for libhybris-common
+ Contains the development files for the common library that contains the
+ Android linker, used to dynamically load and use symbols from Android
+ based libraries.
+ .
+ Hybris is a solution that allows the use of bionic-based HW adaptations in
+ glibc systems.
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libhybris-common1-dbgsym
@@ -454,28 +433,25 @@ Build-Ids: 337aca135f125107de424d033c1141fb17d517f8 713e4e09648e116ec0204e3e06ec
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libhybris-common1
+Package: libhybris-common1-dbgsym
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
+Auto-Built-Package: debug-symbols
 Priority: optional
-Section: libs
+Section: debug
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 1355
-Depends: libc6 (>> 2.43), libc6 (<< 2.44), libgcc-s1 (>= 4.2), libstdc++6 (>= 11)
-Filename: pool/additional/libhybris-common1_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 253356
-MD5sum: fe8de055c1f94f88cdb214bb053e993a
-SHA1: a9fe585f932bfb09b5ea2a552e02dcb0dbd0c077
-SHA256: 9db803d06310cf74a0b1bced44f196555d19d7a706df19651c54393bb2f74912
-SHA512: f85ecde6fab7061b76c91233e7022972840e273c545798f98d003b929e104037daaef54802ced40af68549c1f07aebc80af101b3a249a2fcb11684b44e1745a3
-Description: Common library that contains the Android linker and custom hooks
- Contains a common library that contains the Android linker, used to
- dynamically load and use symbols from Android based libraries.
- .
- Hybris is a solution that allows the use of bionic-based HW adaptations in
- glibc systems.
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 3931
+Depends: libhybris-common1 (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Filename: pool/additional/libhybris-common1-dbgsym_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 2971256
+MD5sum: 7839ed577a7e1a832c35b7932e4ea8b5
+SHA1: e79a0b7bead6204aa5ddbe9011fd5f7d77560be7
+SHA256: 74097b90c05412f0e9774350dcf2e4389c06e7cbbe87dc8430ff90686d79ff02
+SHA512: 4b1acf7cc559fc6d2aa44936d1a923f2d6926e36d29ae87b82c06bad7987adaf734f7407d653366b123185be89dd7fb52db9193d39785141ba24b327dd79418f
+Description: debug symbols for libhybris-common1
+Build-Ids: 337aca135f125107de424d033c1141fb17d517f8 713e4e09648e116ec0204e3e06ec2c7690cb27b1 881f0e88b4a3c195a91237a9301b0552678ae8ec 8d485337c608677544b395d011f241e0b30bb2cd ba2d0c99e54e12c5cb6a6a7dcfb519b5d74d1c4f
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libhybris-common1
@@ -502,25 +478,28 @@ Description: Common library that contains the Android linker and custom hooks
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libhybris-dbgsym
+Package: libhybris-common1
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
-Auto-Built-Package: debug-symbols
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
 Priority: optional
-Section: debug
+Section: libs
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 1812
-Depends: libhybris (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Filename: pool/additional/libhybris-dbgsym_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 760436
-MD5sum: 86b28187f2856a0767b97b50ca8a8c49
-SHA1: a2fe94dd64296e451763bf75ab16003c9cdbe72a
-SHA256: 924bc3e998e62c1a53ba5349f5cef977e2f8dae51e7996cebe33fad87bc7c629
-SHA512: 99ca632c53ab61b2fdb55f82ca8082374e44ff4f5eac1baf3d9f5e5336b7515072967e0a60ba37123b53784a7d92d9df0bc9b5df6efe017781a15eb8a3117fc9
-Description: debug symbols for libhybris
-Build-Ids: 006a4e038fc1ce18e970ae44cbd595ee4189b9e7 28ed07ae36ff3cb1482814a3a3844e07b45b47e6 298426174b9454146d987a1ff08985b85342c400 2d40e4047daec6a028778ad3a47effa6e6d7cde8 3779cc4bcea5ae84c57aea0f9c4ca50269597512 393fef22990a1872b90ccc5b1124aa00c70d8c35 49e8f9644373b9a85e5c96590e8c60a7c10dab40 4a44fc1d0f034a45219ccf263cd054ab1e74c23c 5210b2db34842b2426a70739cb9a07ea143181ca 624909d80657fa35bc6b830d1fb3df0dbc9b9a7e 64ff78d86046c47d2145dfdaa4042474eca41335 695e1c8a4602bca23882822f82940951a954a9a5 6f9ba8a071cc1894995ddb06e4d2c30edd94313e 719efd4d1e6d942303e37f60affe2f09087b807e 74091dbc4c95c3248970689d18bd2c718b168f06 758422882ebd5395357d4b88751d0030c2745804 7bf2b58b6b706459c5de5266c2e43d6cb4f20196 a06e278af0dcf9ec7c9c542745e6d66bff2c9fbd a2a0d406e1d9b7cbc3e38fe0beabf68818494c1f a67836e4119aeb960899fc9caf93fa3d51469e8d a7324b1e11e743d031bc615065624ff85b63fa4c a7d5ac611971f3c5743e603dd85beb3938a6ded0 d55416a5f1b73994feab26a340d7f78e0ad429a4 da5d3644d71f7898206b813180ff3269d7ec73e5 e152de58d32316b2e8f87ef63dd8c5024742654e e8b6d4d935b6482547c04c7d33fd0afa9a3754b5
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 1355
+Depends: libc6 (>> 2.43), libc6 (<< 2.44), libgcc-s1 (>= 4.2), libstdc++6 (>= 11)
+Filename: pool/additional/libhybris-common1_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 253608
+MD5sum: 84bdbbfa21166170bb5a2e7955734f1e
+SHA1: f30e23c5b9c44d626e141b427805a792af0b9311
+SHA256: b00a522b86c7395b993fc023e9c222a7f8549726c46ba7b65c40975fe2b041b8
+SHA512: e23e4dd7dc4b436b55538cf648107c098dbf97e4448f77bc78a01c0842f8e67c4afdc419cb757d601769a1d2189928eb1bf4ace70db915807818b7a368349aeb
+Description: Common library that contains the Android linker and custom hooks
+ Contains a common library that contains the Android linker, used to
+ dynamically load and use symbols from Android based libraries.
+ .
+ Hybris is a solution that allows the use of bionic-based HW adaptations in
+ glibc systems.
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libhybris-dbgsym
@@ -544,28 +523,25 @@ Build-Ids: 006a4e038fc1ce18e970ae44cbd595ee4189b9e7 28ed07ae36ff3cb1482814a3a384
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libhybris-dev
+Package: libhybris-dbgsym
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
+Auto-Built-Package: debug-symbols
 Priority: optional
-Section: libdevel
+Section: debug
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 254
-Depends: android-headers, libandroid-properties-dev (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm), libgles2-mesa-dev, libhardware-dev (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm), libhybris (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm), libhybris-common-dev (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm), libmedia-dev (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Filename: pool/additional/libhybris-dev_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 30180
-MD5sum: f242eef185e4918d9147d30c1bb70384
-SHA1: 1ad3bae6b1b95fb110fe78456b588337b013636e
-SHA256: 065c357c86c2e9a707e63b8dbb4bea0a4e721ca04f5d27221c8b0b6a5cca70ae
-SHA512: 39c4da6da69160c69675ea6153d2a29fcc1ea557b984793e8aca19d44368224dcc2f13ec879804224b809635f48f43f053b44d632e6a003eb5ff207e881a732c
-Description: Development headers and libraries for libhybris
- Contains the header files for use in developing applications that use
- the libhybris library.
- .
- Hybris is a solution that allows the use of bionic-based HW adaptations in
- glibc systems.
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 1812
+Depends: libhybris (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Filename: pool/additional/libhybris-dbgsym_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 760708
+MD5sum: b13e3001e942baf9103a1ee7a9f03415
+SHA1: 6c944824c82217731b59ec2e4ad45a6b0cab93a2
+SHA256: 996479f2da2b07d7339c065a66cb67f94398efd722370d1d5dd509edaaf3147e
+SHA512: d68c3d80a3239c761b824a315bd6c6f1f861edc90bbd17067a6fb0926c2b0e1e981d804326fb0b8168b21b1aa2b71c412c5455479926a43fd5e65855c0a3ce17
+Description: debug symbols for libhybris
+Build-Ids: 006a4e038fc1ce18e970ae44cbd595ee4189b9e7 28ed07ae36ff3cb1482814a3a3844e07b45b47e6 298426174b9454146d987a1ff08985b85342c400 2d40e4047daec6a028778ad3a47effa6e6d7cde8 3779cc4bcea5ae84c57aea0f9c4ca50269597512 393fef22990a1872b90ccc5b1124aa00c70d8c35 49e8f9644373b9a85e5c96590e8c60a7c10dab40 4a44fc1d0f034a45219ccf263cd054ab1e74c23c 5210b2db34842b2426a70739cb9a07ea143181ca 624909d80657fa35bc6b830d1fb3df0dbc9b9a7e 64ff78d86046c47d2145dfdaa4042474eca41335 695e1c8a4602bca23882822f82940951a954a9a5 6f9ba8a071cc1894995ddb06e4d2c30edd94313e 719efd4d1e6d942303e37f60affe2f09087b807e 74091dbc4c95c3248970689d18bd2c718b168f06 758422882ebd5395357d4b88751d0030c2745804 7bf2b58b6b706459c5de5266c2e43d6cb4f20196 a06e278af0dcf9ec7c9c542745e6d66bff2c9fbd a2a0d406e1d9b7cbc3e38fe0beabf68818494c1f a67836e4119aeb960899fc9caf93fa3d51469e8d a7324b1e11e743d031bc615065624ff85b63fa4c a7d5ac611971f3c5743e603dd85beb3938a6ded0 d55416a5f1b73994feab26a340d7f78e0ad429a4 da5d3644d71f7898206b813180ff3269d7ec73e5 e152de58d32316b2e8f87ef63dd8c5024742654e e8b6d4d935b6482547c04c7d33fd0afa9a3754b5
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libhybris-dev
@@ -592,25 +568,28 @@ Description: Development headers and libraries for libhybris
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libhybris-test-dbgsym
+Package: libhybris-dev
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
-Auto-Built-Package: debug-symbols
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
 Priority: optional
-Section: debug
+Section: libdevel
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 242
-Depends: libhybris-test (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Filename: pool/additional/libhybris-test-dbgsym_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 78040
-MD5sum: 641c4425d0f26a8d62672527ab115f22
-SHA1: a1970605c3d181cde40fb5fd634b3620cdc6638a
-SHA256: fc62a49b19887028780cb5aba6f8431992fd99342fd8221fb55b5b3134639416
-SHA512: ea84d4c19c3c6b9bc14910aa057098fee3594d68e501b1c7df060dd3e7f26603a65f7dcf87cf6e17f821b7ca7a968cd8002d0c0ef63470afff8ef13d5ed2ea7d
-Description: debug symbols for libhybris-test
-Build-Ids: 0879ce7790f59ac34ed112a84892be1ee64963bd 28ddc6006d27f9500d2dbda10922548b6b0bebe7 8832e6bd495f6fedf45f71860ea0689a8ec418a4 a6dcd5578ed3ba709ad691fdb7c721845bb9238b b45f15ce6e73a36671e272f007677d8ce72ab780 cc1c169e12a8522fcce27f86c9134e3d46fbd052 ff08a229457dab971e84ebe0a9355b6a7b6b577d
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 254
+Depends: android-headers, libandroid-properties-dev (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm), libgles2-mesa-dev, libhardware-dev (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm), libhybris (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm), libhybris-common-dev (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm), libmedia-dev (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Filename: pool/additional/libhybris-dev_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 30188
+MD5sum: 7ad96a19d93c831174e0167ffaa97d0f
+SHA1: 9a406fbfde89fd505da2f5656860f51b3f81aa65
+SHA256: 5a26172330552d0b8714a9eada13cb26532f2c6ba36b731f4385b5346a9488dc
+SHA512: 20f500ee9f6896a2d7eb9458b38e117a5bb08cd920dd8654a7c0338139dc81f548b4f4b4f18c92ab8524a521918099c0b1a4849a5b9de18d6257fba8f5d7e164
+Description: Development headers and libraries for libhybris
+ Contains the header files for use in developing applications that use
+ the libhybris library.
+ .
+ Hybris is a solution that allows the use of bionic-based HW adaptations in
+ glibc systems.
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libhybris-test-dbgsym
@@ -634,28 +613,25 @@ Build-Ids: 0879ce7790f59ac34ed112a84892be1ee64963bd 28ddc6006d27f9500d2dbda10922
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libhybris-test
+Package: libhybris-test-dbgsym
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
+Auto-Built-Package: debug-symbols
 Priority: optional
-Section: devel
+Section: debug
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 499
-Depends: libhybris (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm), libc6 (>= 2.38), libegl1, libgcc-s1 (>= 3.0), libgles2, libhardware2 (>= 0.0.5.53), libhybris-common1 (>= 0.0.5.53), libstdc++6 (>= 5)
-Filename: pool/additional/libhybris-test_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 21520
-MD5sum: 614a9b6110bfd42477a4e190537a12a5
-SHA1: db0ba4b2af59ecb01d2988cf2ebb4d5b92dc23db
-SHA256: 78a33818c2c037f863f2f1a48334ca22e00d31b016a16e7f8e819f635a620331
-SHA512: 6160c67b9d8ac109aac209b58f0b7038427c2dd4b2e1e9b9dbacc664c074d6779caf4014d0ae4d4d4c2b79791401dbdd795e65049bf5f7b29393bb5495b23fca
-Description: Allows one to run bionic-based HW adaptations in glibc systems - tests
- Contains the test applications used to validate libhybris (needs Android
- libraries or container).
- .
- Hybris is a solution that allows the use of bionic-based HW adaptations in
- glibc systems.
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 242
+Depends: libhybris-test (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Filename: pool/additional/libhybris-test-dbgsym_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 78028
+MD5sum: c1d615c030e5956a9bc887d3c624717d
+SHA1: c559b7171cd188bc71b3b042616f808cb8de9280
+SHA256: 7c7f66b76de44eec1bd28a87cecfb1ad18f8377bbc718afb54ecea60e8f99fa6
+SHA512: 822f90e4cc44f1504f98c599a86ddfed561c223b1d8796c8f71c959e43115a6e6f5667eb1d99888373b92c06467011929b8eaf714367d46d9ce44abb10e858aa
+Description: debug symbols for libhybris-test
+Build-Ids: 0879ce7790f59ac34ed112a84892be1ee64963bd 28ddc6006d27f9500d2dbda10922548b6b0bebe7 8832e6bd495f6fedf45f71860ea0689a8ec418a4 a6dcd5578ed3ba709ad691fdb7c721845bb9238b b45f15ce6e73a36671e272f007677d8ce72ab780 cc1c169e12a8522fcce27f86c9134e3d46fbd052 ff08a229457dab971e84ebe0a9355b6a7b6b577d
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libhybris-test
@@ -682,25 +658,28 @@ Description: Allows one to run bionic-based HW adaptations in glibc systems - te
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libhybris-utils-dbgsym
+Package: libhybris-test
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
-Auto-Built-Package: debug-symbols
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
 Priority: optional
-Section: debug
+Section: devel
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 39
-Depends: libhybris-utils (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Filename: pool/additional/libhybris-utils-dbgsym_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 7764
-MD5sum: c3a658a72b8d14b1ae3d8563efa263bc
-SHA1: 7b1c5ebbc0e3a27f2ac77d8a3b577fc6fae5d5c9
-SHA256: e4fee13e0d773386e10953d79f44f9aa72e5d4b3dae89ed052a0530411571c35
-SHA512: 2f1d7d02d4f736f1123bac70d8abd6718c49b1cc0578ad38d5a1a5ae9708b9646d36e2c422e9aeac3c67bffeb5488f88e2a59fa54470c8626669f25b1f1d463c
-Description: debug symbols for libhybris-utils
-Build-Ids: 8ec6e18171a55a4ecffc2abb29bf631149358c17 923502cbeb1175cb936c955eceeb0695ae812da8
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 499
+Depends: libhybris (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm), libc6 (>= 2.38), libegl1, libgcc-s1 (>= 3.0), libgles2, libhardware2 (>= 0.0.5.53), libhybris-common1 (>= 0.0.5.53), libstdc++6 (>= 5)
+Filename: pool/additional/libhybris-test_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 21596
+MD5sum: 05f8ac9ad2668d039d2235d40d0eb41e
+SHA1: 1f18d7382cee34d45ed9d7c5a47bcdc4f74ebbef
+SHA256: b628c168fca347f6a6e504a05fb9bdbd7a3b1b2b74512f09676174cfb3172cc1
+SHA512: 0b8cd8ae995512616bd014c91a911fe7ca33180adfc72fbb3076ccbb92eb60c0cc56e521e6ad9ff2000da85b352378ffeb50e50c8ca727907fa75d1c1ecd122e
+Description: Allows one to run bionic-based HW adaptations in glibc systems - tests
+ Contains the test applications used to validate libhybris (needs Android
+ libraries or container).
+ .
+ Hybris is a solution that allows the use of bionic-based HW adaptations in
+ glibc systems.
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libhybris-utils-dbgsym
@@ -724,27 +703,25 @@ Build-Ids: 8ec6e18171a55a4ecffc2abb29bf631149358c17 923502cbeb1175cb936c955eceeb
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libhybris-utils
+Package: libhybris-utils-dbgsym
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
+Auto-Built-Package: debug-symbols
 Priority: optional
-Section: utils
+Section: debug
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 171
-Depends: libhybris (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm), libandroid-properties1 (>= 0.0.5.53), libc6 (>= 2.34)
-Filename: pool/additional/libhybris-utils_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 10468
-MD5sum: 043a143ce141b79bb7e46baf36530ff3
-SHA1: 2c68f402ca18045ef1aa6b185335c9412ba83b48
-SHA256: 6d6aefca4a7fb08b1a8cd9e5c48e00b32618e0d0541d7b7b7b3240de6dba2f4a
-SHA512: de8bd27d608d3160df515df53a46d6a395a886a0384bab388d74390d84c99711bc300ce3823a908182bbe6110cf6ec627cc867c26f2c8e2091e9fd731d5c7e7e
-Description: Utilities to help working with the Android HW abstraction layer
- Contains utilities used to help working with Android HW abstraction layer.
- .
- Hybris is a solution that allows the use of bionic-based HW adaptations in
- glibc systems.
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 39
+Depends: libhybris-utils (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Filename: pool/additional/libhybris-utils-dbgsym_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 7756
+MD5sum: a4e8d0fbae88a25fba2ca53ae4e53647
+SHA1: 961c713a6ab338c3207b9d877b1a49e68417ae25
+SHA256: f191cd57c54f294f31ff5a4a186ffd15451db28439d162c9c5a85fac7125bce7
+SHA512: e9e07d7fda5c35bb0dc85a03a4f8a7d2da2c75f872558ca3d892b266b6320dea230ec6a76e49a9ed714ad318e85b8dc7e3db7677ebbd989f01d1ac03dcb5f88e
+Description: debug symbols for libhybris-utils
+Build-Ids: 8ec6e18171a55a4ecffc2abb29bf631149358c17 923502cbeb1175cb936c955eceeb0695ae812da8
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libhybris-utils
@@ -770,24 +747,27 @@ Description: Utilities to help working with the Android HW abstraction layer
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libhybris
+Package: libhybris-utils
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
 Priority: optional
-Section: libs
+Section: utils
+Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 2059
-Depends: libandroid-properties1 (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm), libhardware2 (>= 0.0.5.53), libmedia1, libc6 (>= 2.38), libgbm1 (>= 7.11~1), libgcc-s1 (>= 3.0), libhybris-common1 (>= 0.0.5.53), libstdc++6 (>= 5.2), libwayland-client0 (>= 1.20.0), libwayland-egl1 (>= 1.15.0), libwayland-server0 (>= 1.2.0)
-Filename: pool/additional/libhybris_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 147664
-MD5sum: ce564bd77eb44b83ca7f51086aabafad
-SHA1: 861aca305f71d5741e58dd6b76b4653fb170edac
-SHA256: eb59d942d3c1841a200f816809f2cce3c9b3e78eebeee16232b88da837bee89d
-SHA512: 6928d9d90bf533eacd51f42fc4a2a4521c8c0ccec2571726b7ff2c7c7bc1996426a8b6320346bd6abdd0f744c641fa0e18c1fc84817800cc5b912361fe59ce9a
-Description: Allows one to run bionic-based HW adaptations in glibc systems - libs
+Installed-Size: 171
+Depends: libhybris (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm), libandroid-properties1 (>= 0.0.5.53), libc6 (>= 2.34)
+Filename: pool/additional/libhybris-utils_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 10468
+MD5sum: 9d9781805452a96081c73c151aaf3a5e
+SHA1: a4bee37232ebe9ca78f70d2b863d93285f4a04d3
+SHA256: 69dfe52607ff9f4f2d8fba844a539654f9b7347419fff400df3e7a22c5daf4c4
+SHA512: 5fdea12ac2ef3958607b215be8c748d99c03129425c95a4df9b1719f5a014c12e33aa4f97a1a331ffadee5608f06b3950a50903d25922366472044576c37987d
+Description: Utilities to help working with the Android HW abstraction layer
+ Contains utilities used to help working with Android HW abstraction layer.
+ .
  Hybris is a solution that allows the use of bionic-based HW adaptations in
  glibc systems.
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libhybris
@@ -810,28 +790,24 @@ Description: Allows one to run bionic-based HW adaptations in glibc systems - li
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libmedia-dev
+Package: libhybris
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
 Priority: optional
-Section: libdevel
-Source: libhybris
+Section: libs
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 75
-Depends: android-headers, libmedia1 (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Filename: pool/additional/libmedia-dev_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 10720
-MD5sum: 9cd13a3a415f289bb46177537673da86
-SHA1: 8a62e4a36ded2156463bf9c15569f042c9ca8559
-SHA256: bcd95a3271b74fc36af975c75ef46b56fc1fe130e93451851b4a3ba39e0f2101
-SHA512: 248ba71ee0c3ab298223cc855e12dfe60d883acbc6d8756db9bf1e77f6110e947c96a5943c5788a4cdfbd26c7ea164dc0eca3ede11711a55c7a9460c21040a8e
-Description: Development files for libmedia
- Contains the development files for the Android Media HAL, which
- abstract the access to the Android libstagefright based decoders.
- .
+Installed-Size: 2059
+Depends: libandroid-properties1 (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm), libhardware2 (>= 0.0.5.53), libmedia1, libc6 (>= 2.38), libgbm1 (>= 7.11~1), libgcc-s1 (>= 3.0), libhybris-common1 (>= 0.0.5.53), libstdc++6 (>= 5.2), libwayland-client0 (>= 1.20.0), libwayland-egl1 (>= 1.15.0), libwayland-server0 (>= 1.2.0)
+Filename: pool/additional/libhybris_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 147624
+MD5sum: b8e8bd5cfbffa71f6c79056d685f72bd
+SHA1: 7856dadf0fb39a93b4ec0454f5f7332a957c4119
+SHA256: 5d98b9d51aa5baea0803588fe56fa647399bac0d0cd1696d2760ee5b4c8a9ffb
+SHA512: 9cf370c1ca01f7b58698d3f714a3fc06244220cf16140d04808abe07893abbca274d8537d51d7d1854fe3e9c55b7604151700464316de870a66fdd4277331c85
+Description: Allows one to run bionic-based HW adaptations in glibc systems - libs
  Hybris is a solution that allows the use of bionic-based HW adaptations in
  glibc systems.
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libmedia-dev
@@ -858,25 +834,28 @@ Description: Development files for libmedia
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libmedia1-dbgsym
+Package: libmedia-dev
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
-Auto-Built-Package: debug-symbols
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
 Priority: optional
-Section: debug
+Section: libdevel
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 112
-Depends: libmedia1 (= 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm)
-Filename: pool/additional/libmedia1-dbgsym_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 27420
-MD5sum: 86769e92a69a87452e247c98c82c001d
-SHA1: 068f14a49dd137e8f34778422078cfbd347e4cad
-SHA256: 8adb10457dbc98415209207c6f67ec33e5ffba358b0a41082e56852d20750925
-SHA512: 6a702ff488f8429f5d21abd3b8508ee3f42e9a72159a7208ea10475def5e2015d510f87683a65e47921a419ce422cf6624bbdc448e3224a57c759ccd8f189a8c
-Description: debug symbols for libmedia1
-Build-Ids: fd409e8540eb90c76bcf6c16b1fd7c9bf380162b
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 75
+Depends: android-headers, libmedia1 (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Filename: pool/additional/libmedia-dev_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 10724
+MD5sum: a16f4e2e8764e57626e68ce8f4a136cf
+SHA1: c40caffe9f2ab313c55b3d5b1c0a8fb3fd38785a
+SHA256: 4ead7bf95f7c1e7ce1880ff0a1c81ac5df072eae0dc262eabbdac72de988275b
+SHA512: a291adecf02dda815dd09488d48145f1cd5a23f09ef3401deb63be550b6dbc28668d61cb2735c9ff0fd58bfb4f55175057baa21ea9ee8954ed6e8387c4639ed0
+Description: Development files for libmedia
+ Contains the development files for the Android Media HAL, which
+ abstract the access to the Android libstagefright based decoders.
+ .
+ Hybris is a solution that allows the use of bionic-based HW adaptations in
+ glibc systems.
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libmedia1-dbgsym
@@ -900,29 +879,25 @@ Build-Ids: fd409e8540eb90c76bcf6c16b1fd7c9bf380162b
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libmedia1
+Package: libmedia1-dbgsym
 Architecture: arm64
-Version: 0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
+Auto-Built-Package: debug-symbols
 Priority: optional
-Section: libs
+Section: debug
 Source: libhybris
 Maintainer: Halium Developers <admin@halium.org>
-Installed-Size: 97
-Depends: libhybris-common1 (>= 0.0.5.53)
-Filename: pool/additional/libmedia1_0.0.5.53-1+droidian1+git20260921134100.2342569.next.lindroid.drm_arm64.deb
-Size: 15768
-MD5sum: 5d422906273986d827c8371f6142113b
-SHA1: b11a3b20cecd9f3686e2bae5ac67f458e377e014
-SHA256: 39b17677b4fc7243f23a8f0dfa3a31e85ddb0e5be99006ac93af33d4c575ff7e
-SHA512: 2334ab419399949bfa81f887e632caf8c921e027d2b66a185bb3b5a5ca58f17e10529d8d61a1267ffaf144b0f09c67a0f17d3590a8b2afdf1635ab0380fd3ffc
-Description: Library to provide access to the Android Media HAL
- Contains a library that provides access to the Android Media HAL,
- which abstract the access to the Android libstagefright based
- decoders.
- .
- Hybris is a solution that allows the use of bionic-based HW adaptations in
- glibc systems.
-X-Droidian-Vcs-Revision: 2342569b7339ec48e5a8b6e8a3b3a1a76185db79
+Installed-Size: 112
+Depends: libmedia1 (= 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm)
+Filename: pool/additional/libmedia1-dbgsym_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 27432
+MD5sum: 35f1d63951ed801fd23113834c58bd62
+SHA1: 958eca8e63cc4ea061bd9a4ec3065879e00c392a
+SHA256: 37cf11d5c2e4402207c87a91661d0cabb4d185fa4b0edb4be153822658ae2e57
+SHA512: 84996081fe9f488de4f2d2151fec172864ab4e3aebde0e0affaf2086837cfb8241ff24bbc2753945153015ba447975a4ee3bacd53e8c8215630563c40c336c71
+Description: debug symbols for libmedia1
+Build-Ids: fd409e8540eb90c76bcf6c16b1fd7c9bf380162b
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libmedia1
@@ -950,30 +925,30 @@ Description: Library to provide access to the Android Media HAL
 X-Droidian-Vcs-Revision: 01d02c84d994e805edb88085bc0698d16a5d9919
 X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
-Package: libwlroots-dev
+Package: libmedia1
 Architecture: arm64
-Version: 0.17.4-1~git20260921134247.a7f8e27.next.backport.0.18
-Multi-Arch: same
+Version: 0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm
 Priority: optional
-Section: libdevel
-Source: wlroots
-Maintainer: Sway and related packages team <team+swaywm@tracker.debian.org>
-Installed-Size: 423
-Depends: libwlroots12a (= 0.17.4-1~git20260921134247.a7f8e27.next.backport.0.18), libcap-dev, libdisplay-info-dev, libdrm-dev (>= 2.4.114), libdroid-dev, libegl-dev, libgbm-dev, libgles2-mesa-dev, libinput-dev, libpixman-1-dev, libseat-dev, libsystemd-dev, libliftoff-dev (>= 0.4.0), libudev-dev, libvulkan-dev, libwayland-dev (>= 1.22), libxcb1-dev, libxcb-composite0-dev, libxcb-dri3-dev, libxcb-ewmh-dev, libxcb-icccm4-dev, libxcb-image0-dev, libxcb-present-dev, libxcb-render0-dev, libxcb-render-util0-dev, libxcb-res0-dev, libxcb-shm0-dev, libxcb-xfixes0-dev, libxcb-xinput-dev, libxkbcommon-dev, libx11-xcb-dev, wayland-protocols (>= 1.24), android-headers, libhybris-dev, libhardware-dev
-Filename: pool/additional/libwlroots-dev_0.17.4-1~git20260921134247.a7f8e27.next.backport.0.18_arm64.deb
-Size: 67116
-MD5sum: 96c028bddb5104ef340257d3a8f42381
-SHA1: 3f0548dcfb82391adca21586b10a7d74f44f0f7d
-SHA256: 745e776fa827fae9e718e3a5f9cdd0ef09d36dc6bff510bae933892716a191db
-SHA512: ce3004a1086de737b95fff07014caaf294f08f59166f11d7ab24a7ab15a9da81d64903f1a9c0ee67d63c41f2d7e413b97cfe00ba716bdc40843e2cf522d82fa8
-Homepage: https://gitlab.freedesktop.org/wlroots/wlroots/
-Description: Modular wayland compositor library - development headers
- wlroots is a set of pluggable, composable modules to build a Wayland
- compositor.
+Section: libs
+Source: libhybris
+Maintainer: Halium Developers <admin@halium.org>
+Installed-Size: 97
+Depends: libhybris-common1 (>= 0.0.5.53)
+Filename: pool/additional/libmedia1_0.0.5.53-1+droidian1+git20260924102936.7c28878.next.lindroid.drm_arm64.deb
+Size: 15768
+MD5sum: 737a7a934dbbd57972929c5767060230
+SHA1: 9e01fcdc7c3a7a70944988a4ebf7a2a92e25574d
+SHA256: 21fee5c910d276c6db002cad48f8213207f74a2781f9f5bb27d91a03af618590
+SHA512: 178d3f6e5a10708af7a150f8631817722dfe0e3b8a9feeb95e08b0456e2cad4e6110684c3d574745e904b4ffb2c39174cfb9b7ecdb15735165e398e0112942d7
+Description: Library to provide access to the Android Media HAL
+ Contains a library that provides access to the Android Media HAL,
+ which abstract the access to the Android libstagefright based
+ decoders.
  .
- This package contains the development headers.
-X-Droidian-Vcs-Revision: a7f8e275cc34c9fce84e3257bd41b4bbcbb9eb25
-X-Droidian-Vcs-Url: https://github.com/droidian/wlroots.git
+ Hybris is a solution that allows the use of bionic-based HW adaptations in
+ glibc systems.
+X-Droidian-Vcs-Revision: 7c2887845da04d72016f34761b9485447d74e77a
+X-Droidian-Vcs-Url: https://github.com/droidian/libhybris.git
 
 Package: libwlroots-dev
 Architecture: arm64
@@ -1000,25 +975,29 @@ Description: Modular wayland compositor library - development headers
 X-Droidian-Vcs-Revision: 83184aa2c37cc93ba11fa337a9783d08a26f1a24
 X-Droidian-Vcs-Url: https://github.com/droidian/wlroots.git
 
-Package: libwlroots-examples-dbgsym
+Package: libwlroots-dev
 Architecture: arm64
-Version: 0.17.4-1~git20260921134247.a7f8e27.next.backport.0.18
-Auto-Built-Package: debug-symbols
+Version: 0.17.4-1~git20260924103125.c59e614.next.backport.0.18
+Multi-Arch: same
 Priority: optional
-Section: debug
+Section: libdevel
 Source: wlroots
 Maintainer: Sway and related packages team <team+swaywm@tracker.debian.org>
-Installed-Size: 533
-Depends: libwlroots-examples (= 0.17.4-1~git20260921134247.a7f8e27.next.backport.0.18)
-Filename: pool/additional/libwlroots-examples-dbgsym_0.17.4-1~git20260921134247.a7f8e27.next.backport.0.18_arm64.deb
-Size: 123524
-MD5sum: 209197e88bad28c0e91a485da17b2f49
-SHA1: e95056e00cb8605993133183b171546ceeb0b33a
-SHA256: fedcdd21348584b987ddac11d589216eb8fc21926d9996fbbd634bc277ddadd9
-SHA512: ed448f7e861af317fc5d0bd8fea774a3d979e454f4ee441f78240e4511bcd8d2c5bdf61f121ebcd555a3a45436e47b68feb4add99427fcb506dfae4a51577b3a
-Description: debug symbols for libwlroots-examples
-Build-Ids: 292be79afefa61b2ade8e425afafff7694e3ea65 2d83e4b1f56736c10dfe3fdea48fdcac088ca5c5 3aeee114d4069e8475e0f8e6eed023094154abe9 3d309b0678d03bfd907418acdf867403fcc437ce 48f3e3226895de33244ab62542dbf5291ac30992 747c2ffa0c0ec84e21b993a012a6f99b72ae2c31 82a58a00e7db381a53d20acedd8e5a8c9a5cf8b1 a07214774fea6181625ee832e865584c0bcdb3c8 aeb2367009ca60a88d58e60ae4f2efa7f5354236 bb123592aaba92ba3a520497517ce1547deb7a5a cd9ded159c77596828bc0febf2e704e581f1f093
-X-Droidian-Vcs-Revision: a7f8e275cc34c9fce84e3257bd41b4bbcbb9eb25
+Installed-Size: 423
+Depends: libwlroots12a (= 0.17.4-1~git20260924103125.c59e614.next.backport.0.18), libcap-dev, libdisplay-info-dev, libdrm-dev (>= 2.4.114), libdroid-dev, libegl-dev, libgbm-dev, libgles2-mesa-dev, libinput-dev, libpixman-1-dev, libseat-dev, libsystemd-dev, libliftoff-dev (>= 0.4.0), libudev-dev, libvulkan-dev, libwayland-dev (>= 1.22), libxcb1-dev, libxcb-composite0-dev, libxcb-dri3-dev, libxcb-ewmh-dev, libxcb-icccm4-dev, libxcb-image0-dev, libxcb-present-dev, libxcb-render0-dev, libxcb-render-util0-dev, libxcb-res0-dev, libxcb-shm0-dev, libxcb-xfixes0-dev, libxcb-xinput-dev, libxkbcommon-dev, libx11-xcb-dev, wayland-protocols (>= 1.24), android-headers, libhybris-dev, libhardware-dev
+Filename: pool/additional/libwlroots-dev_0.17.4-1~git20260924103125.c59e614.next.backport.0.18_arm64.deb
+Size: 67112
+MD5sum: 5670e2ca6dfd20cb4f0738ee631164b9
+SHA1: 336006fdfe3078ab406700f5c91be5e5e0ac4d71
+SHA256: 0aa58bd055a70c9d7e3310f19d1a460f82734229d3fb726e920df202ae3908de
+SHA512: 487e425450d1cf9854982ee4bff5d01ce1217863a09d5b6a59e092e27befa24784904fd5fd8eea5a86d690101c2423cae009260ecbe96bad629a99b3b676bba3
+Homepage: https://gitlab.freedesktop.org/wlroots/wlroots/
+Description: Modular wayland compositor library - development headers
+ wlroots is a set of pluggable, composable modules to build a Wayland
+ compositor.
+ .
+ This package contains the development headers.
+X-Droidian-Vcs-Revision: c59e614b24f3a6a80f098b1db300156ba3f14c98
 X-Droidian-Vcs-Url: https://github.com/droidian/wlroots.git
 
 Package: libwlroots-examples-dbgsym
@@ -1042,28 +1021,25 @@ Build-Ids: 292be79afefa61b2ade8e425afafff7694e3ea65 2d83e4b1f56736c10dfe3fdea48f
 X-Droidian-Vcs-Revision: 83184aa2c37cc93ba11fa337a9783d08a26f1a24
 X-Droidian-Vcs-Url: https://github.com/droidian/wlroots.git
 
-Package: libwlroots-examples
+Package: libwlroots-examples-dbgsym
 Architecture: arm64
-Version: 0.17.4-1~git20260921134247.a7f8e27.next.backport.0.18
+Version: 0.17.4-1~git20260924103125.c59e614.next.backport.0.18
+Auto-Built-Package: debug-symbols
 Priority: optional
-Section: libs
+Section: debug
 Source: wlroots
 Maintainer: Sway and related packages team <team+swaywm@tracker.debian.org>
-Installed-Size: 950
-Depends: libc6 (>= 2.34), libcairo2 (>= 1.2.4), libegl1, libgles2, libwayland-client0 (>= 1.22), libwayland-egl1 (>= 1.22), libwayland-server0 (>= 1.22), libwlroots12a (>= 0.17.0), libxkbcommon0 (>= 0.5.0)
-Filename: pool/additional/libwlroots-examples_0.17.4-1~git20260921134247.a7f8e27.next.backport.0.18_arm64.deb
-Size: 68984
-MD5sum: 6015c52ebb512cc93eb972f71ce315ee
-SHA1: e9c712f275c61160d0005558be5f9bb91551ad34
-SHA256: 3b45644b393fccbfae13d45c5bea1de271793afb017ff38b4fb7cf521daa044e
-SHA512: 5a11bfe1dfa7a9edf5851294d674a6f2bf605f6997971e108f7fe974968100eeb8ff99c724dd0355945eabad13f5606e50f08488ce47fe79c0a179c819377ef2
-Homepage: https://gitlab.freedesktop.org/wlroots/wlroots/
-Description: Modular wayland compositor library - binaries
- wlroots is a set of pluggable, composable modules to build a Wayland
- composior.
- .
- This package contains various examples on how to use wlroots.
-X-Droidian-Vcs-Revision: a7f8e275cc34c9fce84e3257bd41b4bbcbb9eb25
+Installed-Size: 533
+Depends: libwlroots-examples (= 0.17.4-1~git20260924103125.c59e614.next.backport.0.18)
+Filename: pool/additional/libwlroots-examples-dbgsym_0.17.4-1~git20260924103125.c59e614.next.backport.0.18_arm64.deb
+Size: 123524
+MD5sum: 9a07b17221988d7bf80a68f3a02851e8
+SHA1: b3eb6c924b25c5367fa86dfcba61ed7feb17b010
+SHA256: 72257d852ee92f747095943c02b14af4b842bf344ae2adfd6ef41408d4e18e7d
+SHA512: 47964f3b20866684f8d1a30a72170acfc4c1232b862147ad2953b2dc5e9c45a107f46e9dc468fbb4d311011fe3877244866aa4ab15d312e00c41467c8a4e576d
+Description: debug symbols for libwlroots-examples
+Build-Ids: 292be79afefa61b2ade8e425afafff7694e3ea65 2d83e4b1f56736c10dfe3fdea48fdcac088ca5c5 3aeee114d4069e8475e0f8e6eed023094154abe9 3d309b0678d03bfd907418acdf867403fcc437ce 48f3e3226895de33244ab62542dbf5291ac30992 747c2ffa0c0ec84e21b993a012a6f99b72ae2c31 82a58a00e7db381a53d20acedd8e5a8c9a5cf8b1 a07214774fea6181625ee832e865584c0bcdb3c8 aeb2367009ca60a88d58e60ae4f2efa7f5354236 bb123592aaba92ba3a520497517ce1547deb7a5a cd9ded159c77596828bc0febf2e704e581f1f093
+X-Droidian-Vcs-Revision: c59e614b24f3a6a80f098b1db300156ba3f14c98
 X-Droidian-Vcs-Url: https://github.com/droidian/wlroots.git
 
 Package: libwlroots-examples
@@ -1090,26 +1066,28 @@ Description: Modular wayland compositor library - binaries
 X-Droidian-Vcs-Revision: 83184aa2c37cc93ba11fa337a9783d08a26f1a24
 X-Droidian-Vcs-Url: https://github.com/droidian/wlroots.git
 
-Package: libwlroots12a-dbgsym
+Package: libwlroots-examples
 Architecture: arm64
-Version: 0.17.4-1~git20260921134247.a7f8e27.next.backport.0.18
-Auto-Built-Package: debug-symbols
-Multi-Arch: same
+Version: 0.17.4-1~git20260924103125.c59e614.next.backport.0.18
 Priority: optional
-Section: debug
+Section: libs
 Source: wlroots
 Maintainer: Sway and related packages team <team+swaywm@tracker.debian.org>
-Installed-Size: 2691
-Depends: libwlroots12a (= 0.17.4-1~git20260921134247.a7f8e27.next.backport.0.18)
-Filename: pool/additional/libwlroots12a-dbgsym_0.17.4-1~git20260921134247.a7f8e27.next.backport.0.18_arm64.deb
-Size: 1310932
-MD5sum: cf23181fc8ee7f849f8b7a371bc63d72
-SHA1: b99fe61d2aab1f3a446afb11bcbbd697386b0dae
-SHA256: 96e51b30eb4a8cb20401ca894f4384806b285495fa31824081b32ed8bdf4bf2f
-SHA512: 45d483869b9e3458422dbd7e7dfd00e4b581523b2eebbf0e0fcd6b190e553bb75fa086a4ca8eae03e610aadaf6b6412b36834561588a4ba476d16ff2db5dc14f
-Description: debug symbols for libwlroots12a
-Build-Ids: abca4c6386ae74f15d0cf2ccc18458065c9db3c2
-X-Droidian-Vcs-Revision: a7f8e275cc34c9fce84e3257bd41b4bbcbb9eb25
+Installed-Size: 950
+Depends: libc6 (>= 2.34), libcairo2 (>= 1.2.4), libegl1, libgles2, libwayland-client0 (>= 1.22), libwayland-egl1 (>= 1.22), libwayland-server0 (>= 1.22), libwlroots12a (>= 0.17.0), libxkbcommon0 (>= 0.5.0)
+Filename: pool/additional/libwlroots-examples_0.17.4-1~git20260924103125.c59e614.next.backport.0.18_arm64.deb
+Size: 69008
+MD5sum: b9fe4e320b43483553f65e118e6873a7
+SHA1: 0a8648630c58af3a7aa44e0295f3685d5c1c4007
+SHA256: c3b202b3878f2c1626533ab5373532aa8cf574623bcb104a6fbeb41db4c84b73
+SHA512: ba259c09e530f595079f59036a5ce84befd797d1b5cd4c26f1ea72a804c68bffd04657480b5dcc6312f0d0260610dae5c0c640dbc202a4ce43b8e8877da8c804
+Homepage: https://gitlab.freedesktop.org/wlroots/wlroots/
+Description: Modular wayland compositor library - binaries
+ wlroots is a set of pluggable, composable modules to build a Wayland
+ composior.
+ .
+ This package contains various examples on how to use wlroots.
+X-Droidian-Vcs-Revision: c59e614b24f3a6a80f098b1db300156ba3f14c98
 X-Droidian-Vcs-Url: https://github.com/droidian/wlroots.git
 
 Package: libwlroots12a-dbgsym
@@ -1134,29 +1112,26 @@ Build-Ids: 1807ee0c1e860a6677695cca9f1aaf52dc6eaa76
 X-Droidian-Vcs-Revision: 83184aa2c37cc93ba11fa337a9783d08a26f1a24
 X-Droidian-Vcs-Url: https://github.com/droidian/wlroots.git
 
-Package: libwlroots12a
+Package: libwlroots12a-dbgsym
 Architecture: arm64
-Version: 0.17.4-1~git20260921134247.a7f8e27.next.backport.0.18
+Version: 0.17.4-1~git20260924103125.c59e614.next.backport.0.18
+Auto-Built-Package: debug-symbols
 Multi-Arch: same
 Priority: optional
-Section: libs
+Section: debug
 Source: wlroots
 Maintainer: Sway and related packages team <team+swaywm@tracker.debian.org>
-Installed-Size: 1312
-Depends: libc6 (>= 2.34), libdisplay-info3 (>= 0.3.0), libdrm2 (>= 2.4.114), libdroid-0-1 (>= 0.2.0), libegl1, libgbm1 (>= 21.1.0), libgles2, libglib2.0-0t64 (>= 2.12.0), libhybris (>= 0.0.5.53), libhybris-common1 (>= 0.0.5.53), libinput10 (>= 1.19.1), libliftoff0 (>= 0.4.1), libpixman-1-0 (>= 0.30.0), libseat1 (>= 0.5.0), libudev1 (>= 183), libvulkan1 (>= 1.2.131.2), libwayland-client0 (>= 1.22), libwayland-server0 (>= 1.22), libxcb-composite0, libxcb-dri3-0 (>= 1.13), libxcb-ewmh2 (>= 0.4.2), libxcb-icccm4 (>= 0.4.2), libxcb-present0, libxcb-render-util0, libxcb-render0, libxcb-res0 (>= 1.10), libxcb-shm0 (>= 1.10), libxcb-xfixes0 (>= 1.15), libxcb-xinput0 (>= 1.17.0), libxcb1, libxkbcommon0 (>= 0.5.0)
-Filename: pool/additional/libwlroots12a_0.17.4-1~git20260921134247.a7f8e27.next.backport.0.18_arm64.deb
-Size: 362032
-MD5sum: 02a8463f24398dd1a059c25f72577e44
-SHA1: e7e9b0d92373965c15c509cca0d83f15a381afc3
-SHA256: ba93d31650bfcb21f1625e3a9b768c4e24b1eb1f73c41b4d18379a337551bddd
-SHA512: 3aab8dda43be96478a9d01e0d4fdae902ee15af69bf37eee566b8a31bea84acef7b5373154992bf07471d504584b456b9a8735c6f31f1e2ed67cbc6647724c4e
-Homepage: https://gitlab.freedesktop.org/wlroots/wlroots/
-Description: Modular wayland compositor library - shared library
- wlroots is a set of pluggable, composable modules to build a Wayland
- composior.
- .
- This package contains the shared library.
-X-Droidian-Vcs-Revision: a7f8e275cc34c9fce84e3257bd41b4bbcbb9eb25
+Installed-Size: 2685
+Depends: libwlroots12a (= 0.17.4-1~git20260924103125.c59e614.next.backport.0.18)
+Filename: pool/additional/libwlroots12a-dbgsym_0.17.4-1~git20260924103125.c59e614.next.backport.0.18_arm64.deb
+Size: 1312244
+MD5sum: 04262ed94cdc1f8ff875898da8649748
+SHA1: 6e0de49d580ac13ffc2ba4d89ef5acb6af44714f
+SHA256: d59121d53c325d9f0b3c348cec1f0e04d991d4d8e21c5fac4e815c10d41558e6
+SHA512: b6d6c30cb0aee390c409767b4f8a694e4c238cabaf4df5bb6bdb34ca119f99cb2bf49296d3b8394705e64f411ebd9588f0fba2fe5bc98517acc40c34dad4d88b
+Description: debug symbols for libwlroots12a
+Build-Ids: 1807ee0c1e860a6677695cca9f1aaf52dc6eaa76
+X-Droidian-Vcs-Revision: c59e614b24f3a6a80f098b1db300156ba3f14c98
 X-Droidian-Vcs-Url: https://github.com/droidian/wlroots.git
 
 Package: libwlroots12a
@@ -1184,6 +1159,31 @@ Description: Modular wayland compositor library - shared library
 X-Droidian-Vcs-Revision: 83184aa2c37cc93ba11fa337a9783d08a26f1a24
 X-Droidian-Vcs-Url: https://github.com/droidian/wlroots.git
 
+Package: libwlroots12a
+Architecture: arm64
+Version: 0.17.4-1~git20260924103125.c59e614.next.backport.0.18
+Multi-Arch: same
+Priority: optional
+Section: libs
+Source: wlroots
+Maintainer: Sway and related packages team <team+swaywm@tracker.debian.org>
+Installed-Size: 1312
+Depends: libc6 (>= 2.34), libdisplay-info3 (>= 0.3.0), libdrm2 (>= 2.4.114), libdroid-0-1 (>= 0.2.0), libegl1, libgbm1 (>= 21.1.0), libgles2, libglib2.0-0t64 (>= 2.12.0), libhybris (>= 0.0.5.53), libhybris-common1 (>= 0.0.5.53), libinput10 (>= 1.19.1), libliftoff0 (>= 0.4.1), libpixman-1-0 (>= 0.30.0), libseat1 (>= 0.5.0), libudev1 (>= 183), libvulkan1 (>= 1.2.131.2), libwayland-client0 (>= 1.22), libwayland-server0 (>= 1.22), libxcb-composite0, libxcb-dri3-0 (>= 1.13), libxcb-ewmh2 (>= 0.4.2), libxcb-icccm4 (>= 0.4.2), libxcb-present0, libxcb-render-util0, libxcb-render0, libxcb-res0 (>= 1.10), libxcb-shm0 (>= 1.10), libxcb-xfixes0 (>= 1.15), libxcb-xinput0 (>= 1.17.0), libxcb1, libxkbcommon0 (>= 0.5.0)
+Filename: pool/additional/libwlroots12a_0.17.4-1~git20260924103125.c59e614.next.backport.0.18_arm64.deb
+Size: 361832
+MD5sum: 06bce753f556e8dbbdce4a374f868efb
+SHA1: e07d94fb2eb90847ba3038a328da1a623fb73ac2
+SHA256: 327e119059475e4af30516be5532630f40493f008da66c1f061e01205516af71
+SHA512: 854e80a9507a57f545d45f3131685d5231352fa1062c4d2a971e63ca352dece138fded6db3107c7e4cabe043efcbe3f960112dc7723515aa40719e55b8ad4497
+Homepage: https://gitlab.freedesktop.org/wlroots/wlroots/
+Description: Modular wayland compositor library - shared library
+ wlroots is a set of pluggable, composable modules to build a Wayland
+ composior.
+ .
+ This package contains the shared library.
+X-Droidian-Vcs-Revision: c59e614b24f3a6a80f098b1db300156ba3f14c98
+X-Droidian-Vcs-Url: https://github.com/droidian/wlroots.git
+
 Package: marble-additional-files
 Architecture: arm64
 Version: 1.0.0+git20260921132550.68c3909.master
@@ -1202,27 +1202,6 @@ Description: additional device-specific files for Xiaomi marble
  systems using the additional repository.
 X-Droidian-Vcs-Revision: 68c3909e057ccd88a57e2c2f8c33ca894a131dfe
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/marble-additional-files.git
-
-Package: xwayland-dbgsym
-Architecture: arm64
-Version: 24.1.3-1~git20260921134106.f5a5f27.head
-Auto-Built-Package: debug-symbols
-Priority: optional
-Section: debug
-Source: xwayland
-Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
-Installed-Size: 6177
-Depends: xwayland (= 24.1.3-1~git20260921134106.f5a5f27.head)
-Filename: pool/additional/xwayland-dbgsym_24.1.3-1~git20260921134106.f5a5f27.head_arm64.deb
-Size: 3609276
-MD5sum: df7a63787422cb68ff2ef5188f25320c
-SHA1: d8d1d5858dceb4db2565b30dcc808253e4d2dfab
-SHA256: 77d83406a7a5f47863656448a31ff6549064e2ba94939fbda22fdc7ba2c2c1d6
-SHA512: c7b6e0bbc03d01c892932a8416c65936c49fd5699982f68e149ca4821029319508a9adbc17eee1aea545cb569758b976b3d87c4af41aeaa3ce8cbfb899fcde26
-Description: debug symbols for xwayland
-Build-Ids: 5e9a5b1acfeacc75b18eba4c26e0c1ca1bde5b22
-X-Droidian-Vcs-Revision: f5a5f273a8166378d5eb627e1c13f524dfb75ad7
-X-Droidian-Vcs-Url: https://salsa.debian.org/xorg-team/wayland/xwayland.git
 
 Package: xwayland-dbgsym
 Architecture: arm64
@@ -1245,26 +1224,25 @@ Build-Ids: 5e9a5b1acfeacc75b18eba4c26e0c1ca1bde5b22
 X-Droidian-Vcs-Revision: 1b9c9ac6956647abb5445f085dc59db6e26eff69
 X-Droidian-Vcs-Url: https://salsa.debian.org/xorg-team/wayland/xwayland.git
 
-Package: xwayland
+Package: xwayland-dbgsym
 Architecture: arm64
-Version: 24.1.3-1~git20260921134106.f5a5f27.head
+Version: 24.1.3-1~git20260924102927.27ee40c.head
+Auto-Built-Package: debug-symbols
 Priority: optional
-Section: x11
+Section: debug
+Source: xwayland
 Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
-Installed-Size: 2511
-Depends: xserver-common, libc6 (>= 2.43), libdecor-0-0 (>= 0.1.0), libdrm2 (>= 2.4.116), libepoxy0 (>= 1.5.2), libgbm1 (>= 21.3.0~rc1), libgcrypt20 (>= 1.12.0), libgl1, libpixman-1-0 (>= 0.30.0), libtirpc3t64 (>= 1.0.2), libwayland-client0 (>= 1.20.0), libxau6 (>= 1:1.0.11), libxcvt0 (>= 0.1.0), libxdmcp6 (>= 1:1.1.5), libxfont2 (>= 1:2.0.1), libxshmfence1
-Filename: pool/additional/xwayland_24.1.3-1~git20260921134106.f5a5f27.head_arm64.deb
-Size: 821460
-MD5sum: 03b7b785d5a93a408aee68ad6c6719c3
-SHA1: fb315bb9296da1bd2d1b451029f8f4d49e9878f9
-SHA256: 6bfe97e5d2831fc52848c498bff0e0494c4b906ec6e8846ea344dda9e90f92d3
-SHA512: f3156400402573e0fef18764ddfc336c5be28a161aee3d49c7390110a9ca7c13c62fb5887b3cb191651fcaec55e7eff8ff8910a139c31357828b38e0d7070bba
-Homepage: https://www.x.org/
-Description: X server for running X clients under Wayland
- This package provides an X server running on top of wayland, using wayland
- input devices for input and forwarding either the root window or individual
- top-level windows as wayland surfaces.
-X-Droidian-Vcs-Revision: f5a5f273a8166378d5eb627e1c13f524dfb75ad7
+Installed-Size: 6177
+Depends: xwayland (= 24.1.3-1~git20260924102927.27ee40c.head)
+Filename: pool/additional/xwayland-dbgsym_24.1.3-1~git20260924102927.27ee40c.head_arm64.deb
+Size: 3609400
+MD5sum: f2be14e62e47d59fb674770ac3089e95
+SHA1: e244c80822bcc425c68fb1d8995825c65d74ec2b
+SHA256: 760bc030991795fb7569d91ef2df70c34caa732c108c37a5f82d0d8a2f015c2b
+SHA512: 92de68a1583ca9872e1dbb2c7d262db2a56d39f2952e3a58ebc0a895c0c5f1507abd368613c2438b82ef91d1cc07b3195d1ccc071e59a256aa82a32bda5258d1
+Description: debug symbols for xwayland
+Build-Ids: 5e9a5b1acfeacc75b18eba4c26e0c1ca1bde5b22
+X-Droidian-Vcs-Revision: 27ee40c86dc44dc846e5af394d60c237151b9395
 X-Droidian-Vcs-Url: https://salsa.debian.org/xorg-team/wayland/xwayland.git
 
 Package: xwayland
@@ -1287,5 +1265,27 @@ Description: X server for running X clients under Wayland
  input devices for input and forwarding either the root window or individual
  top-level windows as wayland surfaces.
 X-Droidian-Vcs-Revision: 1b9c9ac6956647abb5445f085dc59db6e26eff69
+X-Droidian-Vcs-Url: https://salsa.debian.org/xorg-team/wayland/xwayland.git
+
+Package: xwayland
+Architecture: arm64
+Version: 24.1.3-1~git20260924102927.27ee40c.head
+Priority: optional
+Section: x11
+Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Installed-Size: 2511
+Depends: xserver-common, libc6 (>= 2.43), libdecor-0-0 (>= 0.1.0), libdrm2 (>= 2.4.116), libepoxy0 (>= 1.5.2), libgbm1 (>= 21.3.0~rc1), libgcrypt20 (>= 1.12.0), libgl1, libpixman-1-0 (>= 0.30.0), libtirpc3t64 (>= 1.0.2), libwayland-client0 (>= 1.20.0), libxau6 (>= 1:1.0.11), libxcvt0 (>= 0.1.0), libxdmcp6 (>= 1:1.1.5), libxfont2 (>= 1:2.0.1), libxshmfence1
+Filename: pool/additional/xwayland_24.1.3-1~git20260924102927.27ee40c.head_arm64.deb
+Size: 821508
+MD5sum: 103c5bb7b15601ce2a8f4ab9c62b67b8
+SHA1: ed2a332ccc62e6748588d42742317f6e69aae254
+SHA256: 3c8738ec5592e8273c06ef8f142a6328a6a14997d2d83c4cfc2ded67fe973a22
+SHA512: 7dcd47bb1d0ced9906913dbbe8a2b63734d32d9f1587ad234efb9f5279a24aa3e1b7c06efa3adb656407c771140996720d10f53a58d5fe6533dd2f1e777fe8f6
+Homepage: https://www.x.org/
+Description: X server for running X clients under Wayland
+ This package provides an X server running on top of wayland, using wayland
+ input devices for input and forwarding either the root window or individual
+ top-level windows as wayland surfaces.
+X-Droidian-Vcs-Revision: 27ee40c86dc44dc846e5af394d60c237151b9395
 X-Droidian-Vcs-Url: https://salsa.debian.org/xorg-team/wayland/xwayland.git
 
