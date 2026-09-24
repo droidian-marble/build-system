@@ -1,24 +1,5 @@
 Package: adaptation-xiaomi-marble-android
 Architecture: all
-Version: 3.2.3+git20260921133531.dece274.droidian
-Priority: optional
-Section: metapackages
-Source: adaptation-xiaomi-marble
-Maintainer: Halhadus <eneshakans45@proton.me>
-Installed-Size: 45
-Filename: pool/main/adaptation-xiaomi-marble-android_3.2.3+git20260921133531.dece274.droidian_all.deb
-Size: 4792
-MD5sum: da72e33062f11ace9da5350dcd60811d
-SHA1: 776c75a0c374cf6a9f00ff1eb487487ee7aeab8f
-SHA256: ddfbff1e3b2b0be1cfd602f7287846c80ad97a75f35f5ded482ee58bca49fa3f
-SHA512: c8874d67fb8664ce0a636681650e14d03789566fe3c3aadd6b8c5c997c14d777527255944173faf1506519522853745b803cad10b4a943169e8825a6a1433f66
-Description: Xiaomi marble Android vendor adaptation
- Android vendor and system overrides required by Xiaomi marble.
-X-Droidian-Vcs-Revision: dece274d4050b195b544abb5ffc80c20ca4dec8d
-X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
-
-Package: adaptation-xiaomi-marble-android
-Architecture: all
 Version: 3.2.4+git20260924102625.3757102.droidian
 Priority: optional
 Section: metapackages
@@ -36,24 +17,23 @@ Description: Xiaomi marble Android vendor adaptation
 X-Droidian-Vcs-Revision: 3757102810a65136984b6de5975494ec1bf013a8
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
-Package: adaptation-xiaomi-marble-configs
+Package: adaptation-xiaomi-marble-android
 Architecture: all
-Version: 3.2.3+git20260921133531.dece274.droidian
+Version: 3.2.5+git20260924203729.6f456a4.droidian
 Priority: optional
 Section: metapackages
 Source: adaptation-xiaomi-marble
 Maintainer: Halhadus <eneshakans45@proton.me>
-Installed-Size: 95
-Depends: dconf-gsettings-backend | gsettings-backend
-Filename: pool/main/adaptation-xiaomi-marble-configs_3.2.3+git20260921133531.dece274.droidian_all.deb
-Size: 7536
-MD5sum: 1df48d15908b5385dad648d64384e3df
-SHA1: c8714f4cd9af8b5e524091ce496228e2c61389d7
-SHA256: 343e75ee6708e925fb1333bd330f233ebb6e079527641c1b0a1926429cd4c61b
-SHA512: 34ac00080948d7647c7813bca514245d9c6a0811bdda4e857cf7d3a1c1c237ea334e47c88698b969013f4f0b3bb582c20ba33f36de409e3b835b5632feabbee7
-Description: Xiaomi marble Droidian adaptation configuration
- Device-specific configuration files for Xiaomi marble.
-X-Droidian-Vcs-Revision: dece274d4050b195b544abb5ffc80c20ca4dec8d
+Installed-Size: 45
+Filename: pool/main/adaptation-xiaomi-marble-android_3.2.5+git20260924203729.6f456a4.droidian_all.deb
+Size: 4788
+MD5sum: 4b1def625bae3580b409691fd71b98cb
+SHA1: f9516bc3d48a1c544f11c9eb5c7e79f3215dd9cb
+SHA256: cc348694a57763684bae4c317261e4b39a4dbec0f4c918ed4914451761a60680
+SHA512: bef30b62a540a592d154427a40b38ff909541c1faf8d635ef84c18d3c561f1e43ee343ee8437fd0fe9e477920ef4cb82860b74dac63054c6e5bb662b754255bf
+Description: Xiaomi marble Android vendor adaptation
+ Android vendor and system overrides required by Xiaomi marble.
+X-Droidian-Vcs-Revision: 6f456a430a79080ca86c565c0f1ada2a34a36d1e
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
 Package: adaptation-xiaomi-marble-configs
@@ -76,23 +56,24 @@ Description: Xiaomi marble Droidian adaptation configuration
 X-Droidian-Vcs-Revision: 3757102810a65136984b6de5975494ec1bf013a8
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
-Package: adaptation-xiaomi-marble
+Package: adaptation-xiaomi-marble-configs
 Architecture: all
-Version: 3.2.3+git20260921133531.dece274.droidian
+Version: 3.2.5+git20260924203729.6f456a4.droidian
 Priority: optional
 Section: metapackages
+Source: adaptation-xiaomi-marble
 Maintainer: Halhadus <eneshakans45@proton.me>
-Installed-Size: 9
-Depends: adaptation-xiaomi-marble-configs, adaptation-xiaomi-marble-android
-Filename: pool/main/adaptation-xiaomi-marble_3.2.3+git20260921133531.dece274.droidian_all.deb
-Size: 1664
-MD5sum: df91d878b37a7a2c9da644f136cbc972
-SHA1: f1afb5a8f1973d2e19e54f64c81fbb762535fe77
-SHA256: cefc11d0598d07358f48fe0d5ec2a94a5821682cefb67cd1eaae86ff83987fbe
-SHA512: b3ae475240e59deb653c5cc16dba314ee1afbe52aaf80dc6c74251d895ba7e8a21ce5c740875eacb23882577195bac1c2553bf98b928838ba629a4773ead05c9
-Description: Xiaomi marble Droidian adaptation metapackage
- Device adaptation metapackage for Xiaomi marble.
-X-Droidian-Vcs-Revision: dece274d4050b195b544abb5ffc80c20ca4dec8d
+Installed-Size: 97
+Depends: dconf-gsettings-backend | gsettings-backend
+Filename: pool/main/adaptation-xiaomi-marble-configs_3.2.5+git20260924203729.6f456a4.droidian_all.deb
+Size: 7660
+MD5sum: 87a9c352a0c83b738f10f37759113ccf
+SHA1: a69f15afe67b7af9d3602bdd7387bfbef203bcbf
+SHA256: 2179288ff9df5d8a1719cee76cac942331ba22338ba3bc83badc13bfb946184a
+SHA512: 25c57e9b2ab0aa1e66383032bddf191e0ffe700e1b95b39304d9577441e8df91bcbfa846c57d8be82b667edf380854227a01eee843a827b7f6218cada0f0c115
+Description: Xiaomi marble Droidian adaptation configuration
+ Device-specific configuration files for Xiaomi marble.
+X-Droidian-Vcs-Revision: 6f456a430a79080ca86c565c0f1ada2a34a36d1e
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
 
 Package: adaptation-xiaomi-marble
@@ -113,6 +94,95 @@ Description: Xiaomi marble Droidian adaptation metapackage
  Device adaptation metapackage for Xiaomi marble.
 X-Droidian-Vcs-Revision: 3757102810a65136984b6de5975494ec1bf013a8
 X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
+
+Package: adaptation-xiaomi-marble
+Architecture: all
+Version: 3.2.5+git20260924203729.6f456a4.droidian
+Priority: optional
+Section: metapackages
+Maintainer: Halhadus <eneshakans45@proton.me>
+Installed-Size: 9
+Depends: adaptation-hybris-api32-phone, adaptation-xiaomi-marble-configs, adaptation-xiaomi-marble-android, linux-bootimage-xiaomi-marble, libdroid-hal-lights, ofono-binder-plugin-ext-qti-aidl, droidian-quirks-firefox-gpu
+Filename: pool/main/adaptation-xiaomi-marble_3.2.5+git20260924203729.6f456a4.droidian_all.deb
+Size: 1752
+MD5sum: 4530f35f8be2d92696e0f2c4684ec362
+SHA1: e0a782c0247b18034064d4f8720b265368d1fccb
+SHA256: 90275d26ec42b7838918418347ab261abe40317ad1bfca311314ad933bd9d68b
+SHA512: 5a3a71b557273ae9d3309dbd78cf3be41bcf1ea2a57513e02cbef55ddac1e5e3c5add58a422ecb63b5cc194dab0d9bc813fe487a590437c649ef8080a33cd670
+Description: Xiaomi marble Droidian adaptation metapackage
+ Device adaptation metapackage for Xiaomi marble.
+X-Droidian-Vcs-Revision: 6f456a430a79080ca86c565c0f1ada2a34a36d1e
+X-Droidian-Vcs-Url: https://github.com/droidian-marble/adaptation-xiaomi-marble.git
+
+Package: libmtpserver-dev
+Architecture: arm64
+Version: 9+git20260924221259.07d8a16.droidian
+Priority: optional
+Section: libdevel
+Source: mtp
+Maintainer: Bardia Moshiri <fakeshell@bardia.tech>
+Original-Maintainer: Thomas Voß <thomas.voss@canonical.com>
+Installed-Size: 99
+Depends: libmtpserver1 (= 9+git20260924221259.07d8a16.droidian)
+Filename: pool/main/libmtpserver-dev_9+git20260924221259.07d8a16.droidian_arm64.deb
+Size: 13888
+MD5sum: 0966c36bb4b7763bc88cdd3646cdb48e
+SHA1: 345fe08c7988c435df1b9b401257b68cb8fa50c2
+SHA256: b008c0fbddcbde6e8effac5143da390ad48e11eaf25a3e8bd32d254c43af9e73
+SHA512: 6d460a0b8f1870f5ae3bb718b9d700e9861c9759214d167e3670d592ac44ff7be503d12530effacc83fe5262ff4afa13510be0cb5755d59f4700714df95d7da6
+Homepage: http://launchpad.net/mtp
+Description: Library for implementing MTP protocol servers - development files
+ Exposes phone storage over MTP.
+ .
+ Contains header files required to develop actual services.
+X-Droidian-Vcs-Revision: 07d8a16da73d8d3a38f21ba5c81f7472ff633929
+X-Droidian-Vcs-Url: https://github.com/droidian/mtp-server.git
+
+Package: libmtpserver1-dbgsym
+Architecture: arm64
+Version: 9+git20260924221259.07d8a16.droidian
+Auto-Built-Package: debug-symbols
+Priority: optional
+Section: debug
+Source: mtp
+Maintainer: Bardia Moshiri <fakeshell@bardia.tech>
+Original-Maintainer: Thomas Voß <thomas.voss@canonical.com>
+Installed-Size: 653
+Depends: libmtpserver1 (= 9+git20260924221259.07d8a16.droidian)
+Filename: pool/main/libmtpserver1-dbgsym_9+git20260924221259.07d8a16.droidian_arm64.deb
+Size: 444528
+MD5sum: 88fd2bd0f8551cb8d5cc5935d4aaac0f
+SHA1: 9d01ad03886154bf8f66638ed61453cb92834cf6
+SHA256: 925f1f75484eb9b338f59f8d9207e70d957998de19727922f49f4272184b9150
+SHA512: 92e855684fb453fa04423fb879e20234abba8d79c2a7481a1769c0fd8ab2355ab153b6297ea94d1cf599d1666b637c66aa73b48be1ff3d6bc4a669f1d5da8b58
+Description: debug symbols for libmtpserver1
+Build-Ids: 93b34b109014a9635767ac2b1befb93ad35a3789
+X-Droidian-Vcs-Revision: 07d8a16da73d8d3a38f21ba5c81f7472ff633929
+X-Droidian-Vcs-Url: https://github.com/droidian/mtp-server.git
+
+Package: libmtpserver1
+Architecture: arm64
+Version: 9+git20260924221259.07d8a16.droidian
+Priority: optional
+Section: libs
+Source: mtp
+Maintainer: Bardia Moshiri <fakeshell@bardia.tech>
+Original-Maintainer: Thomas Voß <thomas.voss@canonical.com>
+Installed-Size: 210
+Depends: libandroid-properties1 (>= 0.0.5.53), libc6 (>= 2.38), libgcc-s1 (>= 3.0), libgoogle-glog0v6t64 (>= 0.6.0), libstdc++6 (>= 6)
+Filename: pool/main/libmtpserver1_9+git20260924221259.07d8a16.droidian_arm64.deb
+Size: 54940
+MD5sum: 197253df959357d622caaa490cbf95c9
+SHA1: 48e4477fb1d504b2f821fb1d8ceb91f991d3e590
+SHA256: 7d8e46a6e2f52a521cf6d35f1af649752e3e72f6658b1e576801f3c5f1ca6441
+SHA512: a17d47b965a92ee83238134a5a8b60848b93c5e3bc9c29af7c5bdfb4ebe2a514d1ba1e609ac0f5940c236d1b1986a07f9df0bad7210e45f0c6706efcd5dcac72
+Homepage: http://launchpad.net/mtp
+Description: Library for implementing MTP protocol servers - shared library
+ Exposes phone storage over MTP.
+ .
+ This package contains the shared library for MTP.
+X-Droidian-Vcs-Revision: 07d8a16da73d8d3a38f21ba5c81f7472ff633929
+X-Droidian-Vcs-Url: https://github.com/droidian/mtp-server.git
 
 Package: linux-bootimage-5.10.236-xiaomi-marble
 Architecture: arm64
@@ -370,26 +440,6 @@ X-Droidian-Vcs-Url: https://github.com/droidian-marble/linux-droidian-marble-gki
 
 Package: lxc-android
 Architecture: all
-Version: 1:40+git20260921172956.975d963.droidian
-Priority: optional
-Section: libs
-Maintainer: Bardia Moshiri <fakeshell@bardia.tech>
-Installed-Size: 65
-Depends: adduser, cpio, droidian-apex-manager, lxc, libc-bin, halium-wrappers (>= 5), parse-android-dynparts, dmsetup
-Filename: pool/main/lxc-android_40+git20260921172956.975d963.droidian_all.deb
-Size: 8472
-MD5sum: 61859549f1e8fdbf6c2005d5a25e84b8
-SHA1: 99560dc65ac15b414bee20f65919d8043d90567c
-SHA256: f6fae9e8269657ea133ac0c5fce2c2c9e9fbfa5828082a0c62ffa61edd183255
-SHA512: e426f0afae31a424913eefb648a63a0a487699354fe08aba14ea96921701d8a4de14a4f4a923a4bfad4fcfcc944dcf9d85fb8d13eb307b118178d8a8dc2ce325
-Homepage: https://github.com/Halium/lxc-android
-Description: lxc configuration for starting android
- This package provides the configuration for starting android in lxc
-X-Droidian-Vcs-Revision: 975d96311339ac3bcfa6a9e2dc71d4e72d365ed6
-X-Droidian-Vcs-Url: https://github.com/droidian/lxc-android.git
-
-Package: lxc-android
-Architecture: all
 Version: 1:40+git20260924102936.6a46eb4.droidian
 Priority: optional
 Section: libs
@@ -407,4 +457,70 @@ Description: lxc configuration for starting android
  This package provides the configuration for starting android in lxc
 X-Droidian-Vcs-Revision: 6a46eb4880feec31fbf4509f4cc258d9dec21650
 X-Droidian-Vcs-Url: https://github.com/droidian/lxc-android.git
+
+Package: lxc-android
+Architecture: all
+Version: 1:40+git20260924221230.e3c1be2.droidian
+Priority: optional
+Section: libs
+Maintainer: Bardia Moshiri <fakeshell@bardia.tech>
+Installed-Size: 65
+Depends: adduser, cpio, droidian-apex-manager, lxc, libc-bin, halium-wrappers (>= 5), parse-android-dynparts, dmsetup
+Filename: pool/main/lxc-android_40+git20260924221230.e3c1be2.droidian_all.deb
+Size: 8480
+MD5sum: e34ff66b945165fb79aefba80fe12eef
+SHA1: 600106fdbbef8dc1e784630a4fd511bcf2e0bafc
+SHA256: f91dde85d57ac53a93dbbd11dc4ea2888df0b700bf62315c7af35753a12f5ad3
+SHA512: d1a4b67db7a9ca34b4ff829a00d3a6bec48b369035276e2f4a5f761ed2d0d59e1735bdcf26e852cda7b94479b7adcdf8d241b1639c80cad91b109c3119b8f3cb
+Homepage: https://github.com/Halium/lxc-android
+Description: lxc configuration for starting android
+ This package provides the configuration for starting android in lxc
+X-Droidian-Vcs-Revision: e3c1be2e7ac2e44e5c10fc284a5fce38581e44d1
+X-Droidian-Vcs-Url: https://github.com/droidian/lxc-android.git
+
+Package: mtp-server-dbgsym
+Architecture: arm64
+Version: 9+git20260924221259.07d8a16.droidian
+Auto-Built-Package: debug-symbols
+Priority: optional
+Section: debug
+Source: mtp
+Maintainer: Bardia Moshiri <fakeshell@bardia.tech>
+Original-Maintainer: Thomas Voß <thomas.voss@canonical.com>
+Installed-Size: 1440
+Depends: mtp-server (= 9+git20260924221259.07d8a16.droidian)
+Filename: pool/main/mtp-server-dbgsym_9+git20260924221259.07d8a16.droidian_arm64.deb
+Size: 1102360
+MD5sum: 32b670a0ef067a97921a0cc4cff5fc02
+SHA1: 9af7c3cf63a65a233e8a9bb59be1ad406d886bf7
+SHA256: f8f658ce6e7dbb78bb1b97ac9f869097d1969bbbe0b3d0f03d0fb3b8642cb713
+SHA512: bd555e88b85cf7ade23b8d6f485b8c9e8cc8ee08b4c331fb6244ca85817373e9e25bfccb7035fec621f03d597ccd583f7745db6f7b290dead6311c13f1060c8a
+Description: debug symbols for mtp-server
+Build-Ids: b907bde0568059453c090607ebf653bc1bc21e00
+X-Droidian-Vcs-Revision: 07d8a16da73d8d3a38f21ba5c81f7472ff633929
+X-Droidian-Vcs-Url: https://github.com/droidian/mtp-server.git
+
+Package: mtp-server
+Architecture: arm64
+Version: 9+git20260924221259.07d8a16.droidian
+Priority: optional
+Section: utils
+Source: mtp
+Maintainer: Bardia Moshiri <fakeshell@bardia.tech>
+Original-Maintainer: Thomas Voß <thomas.voss@canonical.com>
+Installed-Size: 307
+Depends: libandroid-properties1 (>= 0.0.5.53), libboost-filesystem1.90.0 (>= 1.90.0), libboost-thread1.90.0 (>= 1.90.0), libc6 (>= 2.38), libgcc-s1 (>= 3.0), libgoogle-glog0v6t64 (>= 0.6.0), libmtpserver1 (>= 9+git20260924221259.07d8a16.droidian), libstdc++6 (>= 14)
+Filename: pool/main/mtp-server_9+git20260924221259.07d8a16.droidian_arm64.deb
+Size: 78028
+MD5sum: b9349eaa1b92f28843f12c461c5c1e32
+SHA1: 167167649f4a3fa613647b59cb8330757535119a
+SHA256: 28438d485868dade4d75e14d0664984047f7c275172389bc9fa6e28be4e4577b
+SHA512: 0267c7014efa8e6934042b147896a7ba2fe8202113cc1c91d91d3b4652d5657ac71cfcef7808ffac9b004277277a91cb5c57abdc679b603a0ecfff76a51c2819
+Homepage: http://launchpad.net/mtp
+Description: Small server implementation of MTP.
+ Exposes phone storage over MTP.
+ .
+ Contains a simple MTP server that exposes images, videos, and music.
+X-Droidian-Vcs-Revision: 07d8a16da73d8d3a38f21ba5c81f7472ff633929
+X-Droidian-Vcs-Url: https://github.com/droidian/mtp-server.git
 
