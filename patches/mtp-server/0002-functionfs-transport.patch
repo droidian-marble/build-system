@@ -1,0 +1,765 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 3fbdb0e..c42f520 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -44,6 +44,7 @@ set(
+     MTP_SRCS
+     src/MtpDataPacket.cpp
+     src/MtpDevHandle.cpp
++    src/MtpFfsHandle.cpp
+     src/MtpDebug.cpp
+     src/MtpDevice.cpp
+     src/MtpDeviceInfo.cpp
+diff --git a/include/IMtpHandle.h b/include/IMtpHandle.h
+index 74ab900..29d94b1 100644
+--- a/include/IMtpHandle.h
++++ b/include/IMtpHandle.h
+@@ -35,10 +35,12 @@ public:
+     virtual int sendFile(const mtp_file_range& mfr) = 0;
+     virtual int sendEvent(const mtp_event& event) = 0;
+     virtual void close() = 0;
++    virtual bool isFunctionFs() const = 0;
+ };
+ 
+ IMtpHandle* createMtpDevHandle(const char* path = "/dev/mtp_usb");
+ IMtpHandle* createMtpDevHandleFromFd(int fd);
++IMtpHandle* createMtpFfsHandle(const char* path = "/dev/usb-ffs/mtp");
+ 
+ } // namespace android
+ 
+diff --git a/server/server.cpp b/server/server.cpp
+index d49f777..78a8852 100644
+--- a/server/server.cpp
++++ b/server/server.cpp
+@@ -18,6 +18,7 @@
+ #include "DroidianMtpDatabase.h"
+ 
+ #include <MtpServer.h>
++#include <IMtpHandle.h>
+ #include <MtpStorage.h>
+ 
+ #include <array>
+@@ -177,7 +178,7 @@ private:
+ 
+ public:
+ 
+-    MtpDaemon(int fd):
++    MtpDaemon(IMtpHandle* handle):
+         work(asio::make_work_guard(io_svc)),
+         stream_desc(io_svc)
+     {
+@@ -200,7 +201,7 @@ public:
+ 
+         // MTP server
+         server = new MtpServer(
+-                fd,
++                handle,
+                 mtp_database,
+                 false,
+                 userdata->pw_gid,
+@@ -290,15 +291,32 @@ int main(int argc, char** argv)
+ 
+     LOG(INFO) << "MTP server starting...";
+ 
+-    int fd = open("/dev/mtp_usb", O_RDWR);
+-    while (fd < 0) {
+-        LOG(INFO) << "Couldn't open /dev/mtp_usb, waiting for device...";
+-        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+-        fd = open("/dev/mtp_usb", O_RDWR);
++    IMtpHandle* handle = nullptr;
++    while (!handle) {
++        // Keep the legacy Android gadget transport preferred when both are
++        // present. FunctionFS is a fallback for newer Android kernels that
++        // no longer expose /dev/mtp_usb.
++        if (access("/dev/mtp_usb", R_OK | W_OK) == 0) {
++            handle = createMtpDevHandle();
++            LOG(INFO) << "Using legacy /dev/mtp_usb transport";
++        } else if (access("/dev/usb-ffs/mtp/ep0", R_OK | W_OK) == 0) {
++            handle = createMtpFfsHandle();
++            LOG(INFO) << "Using FunctionFS MTP transport";
++        } else {
++            LOG(INFO) << "No MTP transport available, waiting for /dev/mtp_usb or FunctionFS...";
++            std::this_thread::sleep_for(std::chrono::milliseconds(5000));
++            continue;
++        }
++        if (handle->configure(false) < 0) {
++            PLOG(ERROR) << "MTP transport configure failed";
++            delete handle;
++            handle = nullptr;
++            std::this_thread::sleep_for(std::chrono::milliseconds(5000));
++        }
+     }
+ 
+     try {
+-        MtpDaemon *d = new MtpDaemon(fd);
++        MtpDaemon *d = new MtpDaemon(handle);
+ 
+         d->initStorage();
+         d->run();
+@@ -312,4 +330,5 @@ int main(int argc, char** argv)
+          */
+         LOG(ERROR) << "Could not start the MTP server:" << e.what();
+     }
++    delete handle;
+ }
+diff --git a/src/MtpDevHandle.cpp b/src/MtpDevHandle.cpp
+index 69d43b4..d8dba78 100644
+--- a/src/MtpDevHandle.cpp
++++ b/src/MtpDevHandle.cpp
+@@ -43,6 +43,7 @@ public:
+     int receiveFile(const mtp_file_range& mfr, bool) override { return ::ioctl(mFd, MTP_RECEIVE_FILE, &mfr); }
+     int sendFile(const mtp_file_range& mfr) override { return ::ioctl(mFd, MTP_SEND_FILE_WITH_HEADER, &mfr); }
+     int sendEvent(const mtp_event& event) override { return ::ioctl(mFd, MTP_SEND_EVENT, &event); }
++    bool isFunctionFs() const override { return false; }
+     void close() override {
+         if (mFd >= 0) {
+             ::close(mFd);
+diff --git a/src/MtpFfsHandle.cpp b/src/MtpFfsHandle.cpp
+new file mode 100644
+index 0000000..813405b
+--- /dev/null
++++ b/src/MtpFfsHandle.cpp
+@@ -0,0 +1,581 @@
++/*
++ * Copyright (C) 2016 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "IMtpHandle.h"
++#include "mtp.h"
++
++#include <algorithm>
++#include <atomic>
++#include <chrono>
++#include <endian.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <linux/usb/ch9.h>
++#include <linux/usb/functionfs.h>
++#include <poll.h>
++#include <stdint.h>
++#include <string.h>
++#include <sys/ioctl.h>
++#include <unistd.h>
++
++
++#include <string>
++#include <thread>
++#include <vector>
++
++namespace android {
++namespace {
++
++static const int kMaxPacketSizeFs = 64;
++static const int kMaxPacketSizeHs = 512;
++static const int kMaxPacketSizeSs = 1024;
++static const int kMaxPacketSizeEvent = 28;
++static const size_t kIoSize = 16384;
++static const uint32_t kMaxMtpFileSize = 0xFFFFFFFF;
++static const uint8_t kMtpReqCancel = 0x64;
++static const uint8_t kMtpReqReset = 0x66;
++static const uint8_t kMtpReqGetDeviceStatus = 0x67;
++
++struct FuncDesc {
++    usb_interface_descriptor intf;
++    usb_endpoint_descriptor_no_audio in;
++    usb_endpoint_descriptor_no_audio out;
++    usb_endpoint_descriptor_no_audio intr;
++} __attribute__((packed));
++
++struct SsFuncDesc {
++    usb_interface_descriptor intf;
++    usb_endpoint_descriptor_no_audio in;
++    usb_ss_ep_comp_descriptor inComp;
++    usb_endpoint_descriptor_no_audio out;
++    usb_ss_ep_comp_descriptor outComp;
++    usb_endpoint_descriptor_no_audio intr;
++    usb_ss_ep_comp_descriptor intrComp;
++} __attribute__((packed));
++
++struct DescV2 {
++    usb_functionfs_descs_head_v2 header;
++    __le32 fsCount;
++    __le32 hsCount;
++    __le32 ssCount;
++    __le32 osCount;
++    FuncDesc fs;
++    FuncDesc hs;
++    SsFuncDesc ss;
++    usb_os_desc_header osHeader;
++    usb_ext_compat_desc osDesc;
++} __attribute__((packed));
++
++struct DescV1Header {
++    __le32 magic;
++    __le32 length;
++    __le32 fsCount;
++    __le32 hsCount;
++} __attribute__((packed));
++
++struct DescV1 {
++    DescV1Header header;
++    FuncDesc fs;
++    FuncDesc hs;
++} __attribute__((packed));
++
++struct Strings {
++    usb_functionfs_strings_head header;
++    struct {
++        __le16 code;
++        char interfaceName[4];
++    } __attribute__((packed)) lang0;
++} __attribute__((packed));
++
++struct MtpDataHeader {
++    __le32 length;
++    __le16 type;
++    __le16 command;
++    __le32 transactionId;
++} __attribute__((packed));
++
++struct MtpDeviceStatus {
++    __le16 length;
++    __le16 code;
++} __attribute__((packed));
++
++static usb_interface_descriptor makeInterface(bool ptp) {
++    usb_interface_descriptor d;
++    memset(&d, 0, sizeof(d));
++    d.bLength = USB_DT_INTERFACE_SIZE;
++    d.bDescriptorType = USB_DT_INTERFACE;
++    d.bInterfaceNumber = 0;
++    d.bNumEndpoints = 3;
++    d.bInterfaceClass = USB_CLASS_STILL_IMAGE;
++    d.bInterfaceSubClass = 1;
++    d.bInterfaceProtocol = 1;
++    d.iInterface = ptp ? 0 : 1;
++    return d;
++}
++
++static usb_endpoint_descriptor_no_audio makeEndpoint(uint8_t address, uint8_t type, uint16_t packetSize, uint8_t interval = 0) {
++    usb_endpoint_descriptor_no_audio d;
++    memset(&d, 0, sizeof(d));
++    d.bLength = USB_DT_ENDPOINT_SIZE;
++    d.bDescriptorType = USB_DT_ENDPOINT;
++    d.bEndpointAddress = address;
++    d.bmAttributes = type;
++    d.wMaxPacketSize = htole16(packetSize);
++    d.bInterval = interval;
++    return d;
++}
++
++static usb_ss_ep_comp_descriptor makeComp(uint8_t burst) {
++    usb_ss_ep_comp_descriptor d;
++    memset(&d, 0, sizeof(d));
++    d.bLength = sizeof(d);
++    d.bDescriptorType = USB_DT_SS_ENDPOINT_COMP;
++    d.bMaxBurst = burst;
++    return d;
++}
++
++static FuncDesc makeFuncDesc(bool ptp, uint16_t packetSize) {
++    FuncDesc d;
++    d.intf = makeInterface(ptp);
++    d.in = makeEndpoint(USB_DIR_IN | 1, USB_ENDPOINT_XFER_BULK, packetSize);
++    d.out = makeEndpoint(USB_DIR_OUT | 2, USB_ENDPOINT_XFER_BULK, packetSize);
++    d.intr = makeEndpoint(USB_DIR_IN | 3, USB_ENDPOINT_XFER_INT, kMaxPacketSizeEvent, 6);
++    return d;
++}
++
++static SsFuncDesc makeSsFuncDesc(bool ptp) {
++    SsFuncDesc d;
++    d.intf = makeInterface(ptp);
++    d.in = makeEndpoint(USB_DIR_IN | 1, USB_ENDPOINT_XFER_BULK, kMaxPacketSizeSs);
++    d.inComp = makeComp(6);
++    d.out = makeEndpoint(USB_DIR_OUT | 2, USB_ENDPOINT_XFER_BULK, kMaxPacketSizeSs);
++    d.outComp = makeComp(6);
++    d.intr = makeEndpoint(USB_DIR_IN | 3, USB_ENDPOINT_XFER_INT, kMaxPacketSizeEvent, 6);
++    d.intrComp = makeComp(0);
++    return d;
++}
++
++static bool writeAll(int fd, const void* data, size_t len) {
++    const uint8_t* p = static_cast<const uint8_t*>(data);
++    while (len) {
++        ssize_t n = ::write(fd, p, len);
++        if (n < 0) {
++            if (errno == EINTR)
++                continue;
++            return false;
++        }
++        if (n == 0) {
++            errno = EIO;
++            return false;
++        }
++        p += n;
++        len -= n;
++    }
++    return true;
++}
++
++static bool pwriteAll(int fd, const void* data, size_t len, uint64_t offset) {
++    const uint8_t* p = static_cast<const uint8_t*>(data);
++    while (len) {
++        ssize_t n = ::pwrite(fd, p, len, offset);
++        if (n < 0) {
++            if (errno == EINTR)
++                continue;
++            return false;
++        }
++        if (n == 0) {
++            errno = EIO;
++            return false;
++        }
++        p += n;
++        offset += n;
++        len -= n;
++    }
++    return true;
++}
++
++static bool preadAll(int fd, void* data, size_t len, uint64_t offset) {
++    uint8_t* p = static_cast<uint8_t*>(data);
++    while (len) {
++        ssize_t n = ::pread(fd, p, len, offset);
++        if (n < 0) {
++            if (errno == EINTR)
++                continue;
++            return false;
++        }
++        if (n == 0) {
++            errno = EIO;
++            return false;
++        }
++        p += n;
++        offset += n;
++        len -= n;
++    }
++    return true;
++}
++
++} // namespace
++
++class MtpFfsHandle : public IMtpHandle {
++public:
++    explicit MtpFfsHandle(const char* path)
++        : mPath(path), mControl(-1), mBulkIn(-1), mBulkOut(-1), mIntr(-1), mControlRunning(false), mPtp(false), mCanceled(false) {}
++    ~MtpFfsHandle() override { close(); }
++
++    int configure(bool ptp) override {
++        mPtp = ptp;
++        if (mControl >= 0)
++            return 0;
++        std::string ep0 = mPath + "/ep0";
++        mControl = ::open(ep0.c_str(), O_RDWR);
++        if (mControl < 0)
++            return -1;
++
++        DescV2 v2;
++        memset(&v2, 0, sizeof(v2));
++        v2.header.magic = htole32(FUNCTIONFS_DESCRIPTORS_MAGIC_V2);
++        v2.header.length = htole32(sizeof(v2));
++        v2.header.flags = htole32(FUNCTIONFS_HAS_FS_DESC | FUNCTIONFS_HAS_HS_DESC |
++                                     FUNCTIONFS_HAS_SS_DESC | FUNCTIONFS_HAS_MS_OS_DESC);
++        v2.fsCount = htole32(4);
++        v2.hsCount = htole32(4);
++        v2.ssCount = htole32(7);
++        v2.osCount = htole32(1);
++        v2.fs = makeFuncDesc(ptp, kMaxPacketSizeFs);
++        v2.hs = makeFuncDesc(ptp, kMaxPacketSizeHs);
++        v2.ss = makeSsFuncDesc(ptp);
++        v2.osHeader.interface = 1;
++        v2.osHeader.dwLength = htole32(sizeof(usb_os_desc_header) + sizeof(usb_ext_compat_desc));
++        v2.osHeader.bcdVersion = htole16(1);
++        v2.osHeader.wIndex = htole16(4);
++        v2.osHeader.bCount = 1;
++        v2.osHeader.Reserved = 0;
++        v2.osDesc.bFirstInterfaceNumber = 0;
++        v2.osDesc.Reserved1 = 1;
++        memcpy(v2.osDesc.CompatibleID, ptp ? "PTP" : "MTP", 3);
++
++        if (!writeAll(mControl, &v2, sizeof(v2))) {
++            DescV1 v1;
++            memset(&v1, 0, sizeof(v1));
++            v1.header.magic = htole32(FUNCTIONFS_DESCRIPTORS_MAGIC);
++            v1.header.length = htole32(sizeof(v1));
++            v1.header.fsCount = htole32(4);
++            v1.header.hsCount = htole32(4);
++            v1.fs = makeFuncDesc(ptp, kMaxPacketSizeFs);
++            v1.hs = makeFuncDesc(ptp, kMaxPacketSizeHs);
++            if (!writeAll(mControl, &v1, sizeof(v1))) {
++                close();
++                return -1;
++            }
++        }
++
++        Strings strings;
++        memset(&strings, 0, sizeof(strings));
++        strings.header.magic = htole32(FUNCTIONFS_STRINGS_MAGIC);
++        strings.header.length = htole32(sizeof(strings));
++        strings.header.str_count = htole32(1);
++        strings.header.lang_count = htole32(1);
++        strings.lang0.code = htole16(0x0409);
++        memcpy(strings.lang0.interfaceName, "MTP", 4);
++        if (!writeAll(mControl, &strings, sizeof(strings))) {
++            close();
++            return -1;
++        }
++        return 0;
++    }
++
++    int start(bool ptp) override {
++        if (configure(ptp) < 0)
++            return -1;
++        for (int i = 0; i < 100; ++i) {
++            if (openEndpoints())
++                break;
++            closeEndpoints();
++            std::this_thread::sleep_for(std::chrono::milliseconds(100));
++        }
++        if (mBulkIn < 0 || mBulkOut < 0 || mIntr < 0) {
++            errno = ENODEV;
++            return -1;
++        }
++        mControlRunning = true;
++        mControlThread = std::thread(&MtpFfsHandle::controlLoop, this);
++        return 0;
++    }
++
++    int read(void* data, size_t len) override { return readHandle(mBulkOut, data, len); }
++    int write(const void* data, size_t len) override {
++        int ret = writeHandle(mBulkIn, data, len);
++        if (ret < 0)
++            return ret;
++        const int packetSize = getPacketSize(mBulkIn);
++        if (len > 0 && packetSize > 0 && (len % packetSize) == 0 && writeZeroPacket(mBulkIn) < 0)
++            return -1;
++        return ret;
++    }
++
++    int receiveFile(const mtp_file_range& mfr, bool zeroPacket) override {
++        uint64_t remaining = static_cast<uint64_t>(mfr.length);
++        uint64_t offset = mfr.offset;
++        const bool unknownLength = remaining == kMaxMtpFileSize;
++        const int packetSize = getPacketSize(mBulkOut);
++        std::vector<uint8_t> buffer(kIoSize);
++        int lastRead = 0;
++
++        while (remaining > 0) {
++            size_t wanted = unknownLength ? buffer.size() : std::min<uint64_t>(buffer.size(), remaining);
++            int n = readHandle(mBulkOut, buffer.data(), wanted);
++            if (n < 0)
++                return -1;
++            lastRead = n;
++            if (!unknownLength && static_cast<size_t>(n) != wanted) {
++                errno = EIO;
++                return -1;
++            }
++            if (n && !pwriteAll(mfr.fd, buffer.data(), n, offset))
++                return -1;
++            offset += n;
++            if (unknownLength) {
++                if (static_cast<size_t>(n) < wanted)
++                    break;
++            } else {
++                remaining -= n;
++            }
++        }
++
++        // Match the synchronous AOSP FunctionFS transport: if the last
++        // transfer ended on a max-packet boundary, consume the terminating
++        // zero-length packet before the next MTP request.
++        if (packetSize > 0 && ((lastRead % packetSize) == 0 || zeroPacket)) {
++            ssize_t n;
++            do { n = ::read(mBulkOut, buffer.data(), packetSize); } while (n < 0 && errno == EINTR);
++            if (n != 0)
++                return -1;
++        }
++        return 0;
++    }
++
++    int sendFile(const mtp_file_range& mfr) override {
++        uint64_t remaining = mfr.length;
++        uint64_t offset = mfr.offset;
++        const uint32_t containerLength = static_cast<uint32_t>(std::min<uint64_t>(kMaxMtpFileSize, remaining + sizeof(MtpDataHeader)));
++        const int packetSize = getPacketSize(mBulkIn);
++        const size_t firstData = std::min<uint64_t>(remaining, packetSize > static_cast<int>(sizeof(MtpDataHeader)) ? packetSize - sizeof(MtpDataHeader) : 0);
++        std::vector<uint8_t> buffer(std::max(kIoSize, static_cast<size_t>(packetSize)));
++
++        MtpDataHeader* header = reinterpret_cast<MtpDataHeader*>(buffer.data());
++        header->length = htole32(containerLength);
++        header->type = htole16(MTP_CONTAINER_TYPE_DATA);
++        header->command = htole16(mfr.command);
++        header->transactionId = htole32(mfr.transaction_id);
++        if (firstData && !preadAll(mfr.fd, buffer.data() + sizeof(MtpDataHeader), firstData, offset))
++            return -1;
++        if (writeHandle(mBulkIn, buffer.data(), sizeof(MtpDataHeader) + firstData) < 0)
++            return -1;
++        offset += firstData;
++        remaining -= firstData;
++
++        int lastTransfer = static_cast<int>(sizeof(MtpDataHeader) + firstData);
++        while (remaining) {
++            size_t chunk = std::min<uint64_t>(buffer.size(), remaining);
++            if (!preadAll(mfr.fd, buffer.data(), chunk, offset))
++                return -1;
++            if (writeHandle(mBulkIn, buffer.data(), chunk) < 0)
++                return -1;
++            lastTransfer = static_cast<int>(chunk);
++            offset += chunk;
++            remaining -= chunk;
++        }
++        if (packetSize > 0 && (lastTransfer % packetSize) == 0 && writeZeroPacket(mBulkIn) < 0)
++            return -1;
++        return 0;
++    }
++
++    int sendEvent(const mtp_event& event) override { return writeHandle(mIntr, event.data, event.length) < 0 ? -1 : 0; }
++
++    bool isFunctionFs() const override { return true; }
++
++    void close() override {
++        mControlRunning = false;
++        if (mControlThread.joinable())
++            mControlThread.join();
++        closeEndpoints();
++        if (mControl >= 0) {
++            ::close(mControl);
++            mControl = -1;
++        }
++    }
++
++private:
++    bool openEndpoints() {
++        std::string ep1 = mPath + "/ep1";
++        std::string ep2 = mPath + "/ep2";
++        std::string ep3 = mPath + "/ep3";
++        mBulkIn = ::open(ep1.c_str(), O_RDWR);
++        if (mBulkIn < 0)
++            return false;
++        mBulkOut = ::open(ep2.c_str(), O_RDWR);
++        if (mBulkOut < 0)
++            return false;
++        mIntr = ::open(ep3.c_str(), O_RDWR);
++        return mIntr >= 0;
++    }
++
++    void closeEndpoints() {
++        if (mBulkIn >= 0) { ::close(mBulkIn); mBulkIn = -1; }
++        if (mBulkOut >= 0) { ::close(mBulkOut); mBulkOut = -1; }
++        if (mIntr >= 0) { ::close(mIntr); mIntr = -1; }
++    }
++
++    int writeHandle(int fd, const void* data, size_t len) {
++        if (fd < 0) { errno = ENODEV; return -1; }
++        const uint8_t* p = static_cast<const uint8_t*>(data);
++        size_t done = 0;
++        while (done < len) {
++            size_t chunk = std::min(kIoSize, len - done);
++            ssize_t n = ::write(fd, p + done, chunk);
++            if (n < 0) {
++                if (errno == EINTR)
++                    continue;
++                return -1;
++            }
++            if (n == 0) { errno = EIO; return -1; }
++            done += n;
++        }
++        return done;
++    }
++
++    int writeZeroPacket(int fd) {
++        ssize_t n;
++        do { n = ::write(fd, nullptr, 0); } while (n < 0 && errno == EINTR);
++        return n == 0 ? 0 : -1;
++    }
++
++    int readHandle(int fd, void* data, size_t len) {
++        if (fd < 0) { errno = ENODEV; return -1; }
++        uint8_t* p = static_cast<uint8_t*>(data);
++        size_t done = 0;
++        while (done < len) {
++            size_t chunk = std::min(kIoSize, len - done);
++            ssize_t n = ::read(fd, p + done, chunk);
++            if (n < 0) {
++                if (errno == EINTR)
++                    continue;
++                return -1;
++            }
++            done += n;
++            if (n == 0 || static_cast<size_t>(n) < chunk)
++                break;
++        }
++        return done;
++    }
++
++    int getPacketSize(int fd) {
++        usb_endpoint_descriptor descriptor;
++        memset(&descriptor, 0, sizeof(descriptor));
++        if (::ioctl(fd, FUNCTIONFS_ENDPOINT_DESC, &descriptor) < 0)
++            return kMaxPacketSizeHs;
++        int size = le16toh(descriptor.wMaxPacketSize) & 0x7ff;
++        return size > 0 ? size : kMaxPacketSizeHs;
++    }
++
++    void cancelTransaction() {
++        if (mBulkIn >= 0) {
++            errno = 0;
++            ::read(mBulkIn, nullptr, 0);
++        }
++        if (mBulkOut >= 0) {
++            errno = 0;
++            ::write(mBulkOut, nullptr, 0);
++        }
++        mCanceled = true;
++    }
++
++    int handleControlRequest(const usb_ctrlrequest& setup) {
++        uint16_t length = le16toh(setup.wLength);
++        uint16_t index = le16toh(setup.wIndex);
++        uint16_t value = le16toh(setup.wValue);
++        std::vector<uint8_t> buffer(length);
++        if (!(setup.bRequestType & USB_DIR_IN) && length) {
++            ssize_t n = ::read(mControl, buffer.data(), length);
++            if (n < 0)
++                return -1;
++        }
++        if ((setup.bRequestType & USB_TYPE_MASK) == USB_TYPE_CLASS && index == 0 && value == 0) {
++            if (setup.bRequest == kMtpReqCancel || setup.bRequest == kMtpReqReset) {
++                cancelTransaction();
++            } else if (setup.bRequest == kMtpReqGetDeviceStatus) {
++                if (length < sizeof(MtpDeviceStatus)) { errno = EINVAL; return -1; }
++                MtpDeviceStatus* status = reinterpret_cast<MtpDeviceStatus*>(buffer.data());
++                size_t responseLength = sizeof(MtpDeviceStatus);
++                status->code = htole16(mCanceled ? MTP_RESPONSE_TRANSACTION_CANCELLED : MTP_RESPONSE_OK);
++                if (mCanceled && length >= sizeof(MtpDeviceStatus) + 2 * sizeof(uint16_t)) {
++                    uint16_t* endpoints = reinterpret_cast<uint16_t*>(status + 1);
++                    endpoints[0] = htole16(static_cast<uint16_t>(::ioctl(mBulkIn, FUNCTIONFS_ENDPOINT_REVMAP)));
++                    endpoints[1] = htole16(static_cast<uint16_t>(::ioctl(mBulkOut, FUNCTIONFS_ENDPOINT_REVMAP)));
++                    responseLength += 2 * sizeof(uint16_t);
++                }
++                status->length = htole16(static_cast<uint16_t>(responseLength));
++                mCanceled = false;
++                length = static_cast<uint16_t>(responseLength);
++            }
++        }
++        if ((setup.bRequestType & USB_DIR_IN) && length) {
++            if (!writeAll(mControl, buffer.data(), length))
++                return -1;
++        }
++        return 0;
++    }
++
++    void controlLoop() {
++        while (mControlRunning) {
++            pollfd pfd;
++            pfd.fd = mControl;
++            pfd.events = POLLIN;
++            pfd.revents = 0;
++            int ret = ::poll(&pfd, 1, 250);
++            if (ret < 0) {
++                if (errno == EINTR)
++                    continue;
++                break;
++            }
++            if (ret == 0 || !(pfd.revents & POLLIN))
++                continue;
++            usb_functionfs_event events[8];
++            ssize_t bytes = ::read(mControl, events, sizeof(events));
++            if (bytes <= 0)
++                continue;
++            size_t count = bytes / sizeof(events[0]);
++            for (size_t i = 0; i < count; ++i) {
++                if (events[i].type == FUNCTIONFS_SETUP)
++                    handleControlRequest(events[i].u.setup);
++            }
++        }
++    }
++
++    std::string mPath;
++    int mControl;
++    int mBulkIn;
++    int mBulkOut;
++    int mIntr;
++    std::atomic<bool> mControlRunning;
++    std::thread mControlThread;
++    bool mPtp;
++    std::atomic<bool> mCanceled;
++};
++
++IMtpHandle* createMtpFfsHandle(const char* path) { return new MtpFfsHandle(path); }
++
++} // namespace android
+diff --git a/src/MtpServer.cpp b/src/MtpServer.cpp
+index dadd7cc..9362c4e 100644
+--- a/src/MtpServer.cpp
++++ b/src/MtpServer.cpp
+@@ -110,6 +110,8 @@ static const MtpEventCode kSupportedEventCodes[] = {
+ 
+ namespace {
+ 
++static const int kMtpDataPacketBufferSize = 16384;
++
+ struct MtpTransportState {
+     IMtpHandle* handle;
+     bool owned;
+@@ -1094,6 +1096,7 @@ MtpResponseCode MtpServer::doSendObject() {
+     mode_t mask;
+     int ret, initialData;
+     bool isCanceled = false;
++    bool zeroPacket = false;
+ 
+     if (mSendObjectHandle == kInvalidObjectHandle) {
+         LOG(ERROR) << "Expected SendObjectInfo before SendObject";
+@@ -1131,7 +1134,10 @@ MtpResponseCode MtpServer::doSendObject() {
+         LOG(ERROR) << "failed to write initial data";
+         result = MTP_RESPONSE_GENERAL_ERROR;
+     } else {
+-        if (mSendObjectFileSize - initialData > 0) {
++        zeroPacket = mtpHandle(this)->isFunctionFs() &&
++                     mSendObjectFileSize - initialData == 0 &&
++                     initialData == kMtpDataPacketBufferSize - MTP_CONTAINER_HEADER_SIZE;
++        if (mSendObjectFileSize - initialData > 0 || zeroPacket) {
+             mfr.offset = initialData;
+             if (mSendObjectFileSize == 0xFFFFFFFF) {
+                 // tell driver to read until it receives a short packet
+@@ -1142,7 +1148,7 @@ MtpResponseCode MtpServer::doSendObject() {
+ 
+             VLOG(2) << "receiving " << mSendObjectFilePath.c_str();
+             // transfer the file
+-            ret = mtpHandle(this)->receiveFile(mfr, false);
++            ret = mtpHandle(this)->receiveFile(mfr, zeroPacket);
+             if ((ret < 0) && (errno == ECANCELED)) {
+                 isCanceled = true;
+             }
+@@ -1352,14 +1358,17 @@ MtpResponseCode MtpServer::doSendPartialObject() {
+     if (ret < 0) {
+         PLOG(ERROR) << "failed to write initial data";
+     } else {
+-        if (length > 0) {
++        bool zeroPacket = mtpHandle(this)->isFunctionFs() &&
++                          length == 0 &&
++                          initialData == kMtpDataPacketBufferSize - MTP_CONTAINER_HEADER_SIZE;
++        if (length > 0 || zeroPacket) {
+             mtp_file_range  mfr;
+             mfr.fd = edit->mFD;
+             mfr.offset = offset;
+             mfr.length = length;
+ 
+             // transfer the file
+-            ret = mtpHandle(this)->receiveFile(mfr, false);
++            ret = mtpHandle(this)->receiveFile(mfr, zeroPacket);
+             if ((ret < 0) && (errno == ECANCELED)) {
+                 isCanceled = true;
+             }

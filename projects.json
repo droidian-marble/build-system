@@ -110,6 +110,14 @@
       "branch": "master",
       "apt_packages": [],
       "dependencies": []
+    },
+    {
+      "name": "mtp-server",
+      "base": true,
+      "repo": "https://github.com/droidian/mtp-server.git",
+      "branch": "droidian",
+      "apt_packages": [],
+      "dependencies": []
     }
   ]
 }

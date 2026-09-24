@@ -1,0 +1,53 @@
+diff --git a/server/DroidianMtpDatabase.h b/server/DroidianMtpDatabase.h
+index c74872b..5b6f7c3 100644
+--- a/server/DroidianMtpDatabase.h
++++ b/server/DroidianMtpDatabase.h
+@@ -160,7 +160,8 @@ private:
+                     local_server->sendObjectAdded(handle);
+ 
+             } catch (const filesystem_error& ex) {
+-                PLOG(WARNING) << "There was an error reading file properties";
++                VLOG(1) << "Skipping unreadable file " << p.string()
++                        << ": " << ex.what();
+             }
+         }
+     }
+@@ -172,17 +173,32 @@ private:
+         boost::system::error_code ec;
+         directory_iterator i (p, ec);
+ 
+-        if (ec == boost::system::errc::permission_denied) {
+-            VLOG(2) << "Could not immediately read dir; retrying.";
+-            boost::this_thread::sleep(boost::posix_time::millisec(500));
+-            i = directory_iterator(p);
++        // An unreadable subtree must not abort enumeration of the entire
++        // storage. Do not retry permission errors here: container data trees
++        // can contain hundreds of inaccessible directories and a per-path
++        // retry would make MTP startup unreasonably slow.
++        if (ec) {
++            VLOG(1) << "Skipping unreadable directory " << p.string()
++                    << ": " << ec.message();
++            return;
+         }
+ 
+-        copy(i, directory_iterator(), std::back_inserter(v));
++        try {
++            copy(i, directory_iterator(), std::back_inserter(v));
++        } catch (const filesystem_error& ex) {
++            VLOG(1) << "Skipping directory after enumeration error "
++                    << p.string() << ": " << ex.what();
++            return;
++        }
+ 
+         for (std::vector<path>::const_iterator it(v.begin()), it_end(v.end()); it != it_end; ++it)
+         {
+-            add_file_entry(*it, parent, storage);
++            try {
++                add_file_entry(*it, parent, storage);
++            } catch (const filesystem_error& ex) {
++                VLOG(1) << "Skipping unreadable path " << it->string()
++                        << ": " << ex.what();
++            }
+         }
+     }
+ 

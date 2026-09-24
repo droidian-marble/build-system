@@ -1,0 +1,620 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 1238d00..3fbdb0e 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -14,10 +14,12 @@ set(MTP_VERSION_MINOR 0)
+ set(MTP_VERSION_PATCH 0)
+ 
+ find_package(Boost REQUIRED COMPONENTS thread filesystem unit_test_framework)
++find_package(Threads REQUIRED)
+ pkg_check_modules(GLOG REQUIRED libglog)
+ 
+ set(
+     MTP_HEADERS
++    include/IMtpHandle.h
+     include/MtpDatabase.h
+     include/MtpDataPacket.h
+     include/MtpDebug.h
+@@ -41,6 +43,7 @@ set(
+ set(
+     MTP_SRCS
+     src/MtpDataPacket.cpp
++    src/MtpDevHandle.cpp
+     src/MtpDebug.cpp
+     src/MtpDevice.cpp
+     src/MtpDeviceInfo.cpp
+@@ -71,6 +74,7 @@ add_library(
+ target_link_libraries(
+   mtpserver
+   android-properties
++  Threads::Threads
+   ${GLOG_LIBRARIES}
+   ${DBUSCPP_LIBRARIES}
+ )
+diff --git a/include/IMtpHandle.h b/include/IMtpHandle.h
+new file mode 100644
+index 0000000..74ab900
+--- /dev/null
++++ b/include/IMtpHandle.h
+@@ -0,0 +1,45 @@
++/*
++ * Copyright (C) 2016 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef _I_MTP_HANDLE_H
++#define _I_MTP_HANDLE_H
++
++#include <stddef.h>
++#include <stdint.h>
++#include <sys/types.h>
++#include "linux/usb/f_mtp.h"
++
++namespace android {
++
++class IMtpHandle {
++public:
++    virtual ~IMtpHandle() {}
++    virtual int configure(bool ptp) = 0;
++    virtual int start(bool ptp) = 0;
++    virtual int read(void* data, size_t len) = 0;
++    virtual int write(const void* data, size_t len) = 0;
++    virtual int receiveFile(const mtp_file_range& mfr, bool zeroPacket) = 0;
++    virtual int sendFile(const mtp_file_range& mfr) = 0;
++    virtual int sendEvent(const mtp_event& event) = 0;
++    virtual void close() = 0;
++};
++
++IMtpHandle* createMtpDevHandle(const char* path = "/dev/mtp_usb");
++IMtpHandle* createMtpDevHandleFromFd(int fd);
++
++} // namespace android
++
++#endif // _I_MTP_HANDLE_H
+diff --git a/include/MtpDataPacket.h b/include/MtpDataPacket.h
+index 13d3bd9..504c04a 100644
+--- a/include/MtpDataPacket.h
++++ b/include/MtpDataPacket.h
+@@ -25,6 +25,8 @@ struct usb_request;
+ 
+ namespace android {
+ 
++class IMtpHandle;
++
+ class MtpStringBuffer;
+ 
+ class MtpDataPacket : public MtpPacket {
+@@ -101,6 +103,9 @@ public:
+     // write our data to the given file descriptor
+     int                 write(int fd);
+     int                 writeData(int fd, void* data, uint32_t length);
++    int                 read(IMtpHandle* handle);
++    int                 write(IMtpHandle* handle);
++    int                 writeData(IMtpHandle* handle, void* data, uint32_t length);
+ #endif
+ 
+ #ifdef MTP_HOST
+diff --git a/include/MtpEventPacket.h b/include/MtpEventPacket.h
+index 660baad..319a4e4 100644
+--- a/include/MtpEventPacket.h
++++ b/include/MtpEventPacket.h
+@@ -22,6 +22,8 @@
+ 
+ namespace android {
+ 
++class IMtpHandle;
++
+ class MtpEventPacket : public MtpPacket {
+ 
+ public:
+@@ -31,6 +33,7 @@ public:
+ #ifdef MTP_DEVICE
+     // write our data to the given file descriptor
+     int                 write(int fd);
++    int                 write(IMtpHandle* handle);
+ #endif
+ 
+ #ifdef MTP_HOST
+diff --git a/include/MtpRequestPacket.h b/include/MtpRequestPacket.h
+index 79b798d..4e634a4 100644
+--- a/include/MtpRequestPacket.h
++++ b/include/MtpRequestPacket.h
+@@ -24,6 +24,8 @@ struct usb_request;
+ 
+ namespace android {
+ 
++class IMtpHandle;
++
+ class MtpRequestPacket : public MtpPacket {
+ 
+ public:
+@@ -33,6 +35,7 @@ public:
+ #ifdef MTP_DEVICE
+     // fill our buffer with data from the given file descriptor
+     int                 read(int fd);
++    int                 read(IMtpHandle* handle);
+ #endif
+ 
+ #ifdef MTP_HOST
+diff --git a/include/MtpResponsePacket.h b/include/MtpResponsePacket.h
+index 592ad4a..8b141bc 100644
+--- a/include/MtpResponsePacket.h
++++ b/include/MtpResponsePacket.h
+@@ -22,6 +22,8 @@
+ 
+ namespace android {
+ 
++class IMtpHandle;
++
+ class MtpResponsePacket : public MtpPacket {
+ 
+ public:
+@@ -31,6 +33,7 @@ public:
+ #ifdef MTP_DEVICE
+     // write our data to the given file descriptor
+     int                 write(int fd);
++    int                 write(IMtpHandle* handle);
+ #endif
+ 
+ #ifdef MTP_HOST
+diff --git a/include/MtpServer.h b/include/MtpServer.h
+index 63da204..31a64ed 100644
+--- a/include/MtpServer.h
++++ b/include/MtpServer.h
+@@ -28,6 +28,7 @@
+ 
+ namespace android {
+ 
++class IMtpHandle;
+ class MtpDatabase;
+ class MtpStorage;
+ 
+@@ -95,6 +96,8 @@ private:
+ public:
+                         MtpServer(int fd, MtpDatabase* database, bool ptp,
+                                     int fileGroup, int filePerm, int directoryPerm);
++                        MtpServer(IMtpHandle* handle, MtpDatabase* database, bool ptp,
++                                    int fileGroup, int filePerm, int directoryPerm);
+     virtual             ~MtpServer();
+ 
+     MtpStorage*         getStorage(MtpStorageID id);
+diff --git a/src/MtpDataPacket.cpp b/src/MtpDataPacket.cpp
+index fb35212..1c70809 100644
+--- a/src/MtpDataPacket.cpp
++++ b/src/MtpDataPacket.cpp
+@@ -25,6 +25,7 @@
+ #include <glog/logging.h>
+ 
+ #include "MtpDataPacket.h"
++#include "IMtpHandle.h"
+ #include "MtpStringBuffer.h"
+ 
+ #define MTP_BUFFER_SIZE 16384
+@@ -448,6 +449,32 @@ int MtpDataPacket::writeData(int fd, void* data, uint32_t length) {
+     return (ret < 0 ? ret : 0);
+ }
+ 
++int MtpDataPacket::read(IMtpHandle* handle) {
++    int ret = handle->read(mBuffer, MTP_BUFFER_SIZE);
++    if (ret < MTP_CONTAINER_HEADER_SIZE)
++        return -1;
++    mPacketSize = ret;
++    mOffset = MTP_CONTAINER_HEADER_SIZE;
++    return ret;
++}
++
++int MtpDataPacket::write(IMtpHandle* handle) {
++    MtpPacket::putUInt32(MTP_CONTAINER_LENGTH_OFFSET, mPacketSize);
++    MtpPacket::putUInt16(MTP_CONTAINER_TYPE_OFFSET, MTP_CONTAINER_TYPE_DATA);
++    int ret = handle->write(mBuffer, mPacketSize);
++    return (ret < 0 ? ret : 0);
++}
++
++int MtpDataPacket::writeData(IMtpHandle* handle, void* data, uint32_t length) {
++    allocate(length + MTP_CONTAINER_HEADER_SIZE);
++    memcpy(mBuffer + MTP_CONTAINER_HEADER_SIZE, data, length);
++    length += MTP_CONTAINER_HEADER_SIZE;
++    MtpPacket::putUInt32(MTP_CONTAINER_LENGTH_OFFSET, length);
++    MtpPacket::putUInt16(MTP_CONTAINER_TYPE_OFFSET, MTP_CONTAINER_TYPE_DATA);
++    int ret = handle->write(mBuffer, length);
++    return (ret < 0 ? ret : 0);
++}
++
+ #endif // MTP_DEVICE
+ 
+ #ifdef MTP_HOST
+diff --git a/src/MtpDevHandle.cpp b/src/MtpDevHandle.cpp
+new file mode 100644
+index 0000000..69d43b4
+--- /dev/null
++++ b/src/MtpDevHandle.cpp
+@@ -0,0 +1,61 @@
++/*
++ * Copyright (C) 2016 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "IMtpHandle.h"
++
++#include <errno.h>
++#include <fcntl.h>
++#include <sys/ioctl.h>
++#include <unistd.h>
++
++#include <string>
++
++namespace android {
++
++class MtpDevHandle : public IMtpHandle {
++public:
++    explicit MtpDevHandle(const char* path) : mPath(path), mFd(-1) {}
++    explicit MtpDevHandle(int fd) : mFd(fd) {}
++    ~MtpDevHandle() override { close(); }
++
++    int configure(bool) override { return 0; }
++    int start(bool) override {
++        if (mFd >= 0)
++            return 0;
++        mFd = ::open(mPath.c_str(), O_RDWR);
++        return mFd < 0 ? -1 : 0;
++    }
++    int read(void* data, size_t len) override { return ::read(mFd, data, len); }
++    int write(const void* data, size_t len) override { return ::write(mFd, data, len); }
++    int receiveFile(const mtp_file_range& mfr, bool) override { return ::ioctl(mFd, MTP_RECEIVE_FILE, &mfr); }
++    int sendFile(const mtp_file_range& mfr) override { return ::ioctl(mFd, MTP_SEND_FILE_WITH_HEADER, &mfr); }
++    int sendEvent(const mtp_event& event) override { return ::ioctl(mFd, MTP_SEND_EVENT, &event); }
++    void close() override {
++        if (mFd >= 0) {
++            ::close(mFd);
++            mFd = -1;
++        }
++    }
++
++private:
++    std::string mPath;
++    int mFd;
++};
++
++IMtpHandle* createMtpDevHandle(const char* path) { return new MtpDevHandle(path); }
++IMtpHandle* createMtpDevHandleFromFd(int fd) { return new MtpDevHandle(fd); }
++
++} // namespace android
+diff --git a/src/MtpEventPacket.cpp b/src/MtpEventPacket.cpp
+index 9bcaaab..c34694f 100644
+--- a/src/MtpEventPacket.cpp
++++ b/src/MtpEventPacket.cpp
+@@ -28,6 +28,7 @@
+ #endif
+ 
+ #include "MtpEventPacket.h"
++#include "IMtpHandle.h"
+ 
+ #include <usbhost/usbhost.h>
+ 
+@@ -53,6 +54,15 @@ int MtpEventPacket::write(int fd) {
+     int ret = ::ioctl(fd, MTP_SEND_EVENT, (unsigned long)&event);
+     return (ret < 0 ? ret : 0);
+ }
++
++int MtpEventPacket::write(IMtpHandle* handle) {
++    struct mtp_event event;
++    putUInt32(MTP_CONTAINER_LENGTH_OFFSET, mPacketSize);
++    putUInt16(MTP_CONTAINER_TYPE_OFFSET, MTP_CONTAINER_TYPE_EVENT);
++    event.data = mBuffer;
++    event.length = mPacketSize;
++    return handle->sendEvent(event);
++}
+ #endif
+ 
+ #ifdef MTP_HOST
+diff --git a/src/MtpRequestPacket.cpp b/src/MtpRequestPacket.cpp
+index 0f7ed37..d885103 100644
+--- a/src/MtpRequestPacket.cpp
++++ b/src/MtpRequestPacket.cpp
+@@ -22,6 +22,7 @@
+ #include <unistd.h>
+ 
+ #include "MtpRequestPacket.h"
++#include "IMtpHandle.h"
+ 
+ #include <usbhost/usbhost.h>
+ #include <glog/logging.h>
+@@ -57,6 +58,20 @@ int MtpRequestPacket::read(int fd) {
+     }
+     return ret;
+ }
++
++int MtpRequestPacket::read(IMtpHandle* handle) {
++    int ret = handle->read(mBuffer, mBufferSize);
++    if (ret < 0)
++        return ret;
++    if (ret >= MTP_CONTAINER_HEADER_SIZE && ret <= MTP_CONTAINER_HEADER_SIZE + 5 * sizeof(uint32_t) && ((ret - MTP_CONTAINER_HEADER_SIZE) & 3) == 0) {
++        mPacketSize = ret;
++        mParameterCount = (ret - MTP_CONTAINER_HEADER_SIZE) / sizeof(uint32_t);
++    } else {
++        LOG(ERROR) << "Malformed MTP request packet";
++        ret = -1;
++    }
++    return ret;
++}
+ #endif
+ 
+ #ifdef MTP_HOST
+diff --git a/src/MtpResponsePacket.cpp b/src/MtpResponsePacket.cpp
+index 110aea9..ed766d7 100644
+--- a/src/MtpResponsePacket.cpp
++++ b/src/MtpResponsePacket.cpp
+@@ -22,6 +22,7 @@
+ #include <unistd.h>
+ 
+ #include "MtpResponsePacket.h"
++#include "IMtpHandle.h"
+ 
+ #include <usbhost/usbhost.h>
+ 
+@@ -42,6 +43,13 @@ int MtpResponsePacket::write(int fd) {
+     int ret = ::write(fd, mBuffer, mPacketSize);
+     return (ret < 0 ? ret : 0);
+ }
++
++int MtpResponsePacket::write(IMtpHandle* handle) {
++    putUInt32(MTP_CONTAINER_LENGTH_OFFSET, mPacketSize);
++    putUInt16(MTP_CONTAINER_TYPE_OFFSET, MTP_CONTAINER_TYPE_RESPONSE);
++    int ret = handle->write(mBuffer, mPacketSize);
++    return (ret < 0 ? ret : 0);
++}
+ #endif
+ 
+ #ifdef MTP_HOST
+diff --git a/src/MtpServer.cpp b/src/MtpServer.cpp
+index b2d9e9c..dadd7cc 100644
+--- a/src/MtpServer.cpp
++++ b/src/MtpServer.cpp
+@@ -15,6 +15,8 @@
+  */
+ 
+ #include <iomanip>
++#include <map>
++#include <mutex>
+ #include <cstdio>
+ #include <cstdlib>
+ #include <cstring>
+@@ -36,6 +38,7 @@
+ #include "MtpObjectInfo.h"
+ #include "MtpProperty.h"
+ #include "MtpServer.h"
++#include "IMtpHandle.h"
+ #include "MtpStorage.h"
+ #include "MtpStringBuffer.h"
+ 
+@@ -105,6 +108,45 @@ static const MtpEventCode kSupportedEventCodes[] = {
+     MTP_EVENT_OBJECT_PROP_CHANGED,
+ };
+ 
++namespace {
++
++struct MtpTransportState {
++    IMtpHandle* handle;
++    bool owned;
++};
++
++std::mutex gTransportMutex;
++std::map<const MtpServer*, MtpTransportState> gTransports;
++
++void setMtpHandle(const MtpServer* server, IMtpHandle* handle, bool owned) {
++    std::lock_guard<std::mutex> lock(gTransportMutex);
++    gTransports[server] = {handle, owned};
++}
++
++IMtpHandle* mtpHandle(const MtpServer* server) {
++    std::lock_guard<std::mutex> lock(gTransportMutex);
++    std::map<const MtpServer*, MtpTransportState>::const_iterator it = gTransports.find(server);
++    return it == gTransports.end() ? NULL : it->second.handle;
++}
++
++void clearMtpHandle(const MtpServer* server) {
++    IMtpHandle* handle = NULL;
++    bool owned = false;
++    {
++        std::lock_guard<std::mutex> lock(gTransportMutex);
++        std::map<const MtpServer*, MtpTransportState>::iterator it = gTransports.find(server);
++        if (it == gTransports.end())
++            return;
++        handle = it->second.handle;
++        owned = it->second.owned;
++        gTransports.erase(it);
++    }
++    if (owned)
++        delete handle;
++}
++
++} // namespace
++
+ MtpServer::MtpServer(int fd, MtpDatabase* database, bool ptp,
+                     int fileGroup, int filePerm, int directoryPerm)
+     :   mFD(fd),
+@@ -119,9 +161,28 @@ MtpServer::MtpServer(int fd, MtpDatabase* database, bool ptp,
+         mSendObjectFormat(0),
+         mSendObjectFileSize(0)
+ {
++    setMtpHandle(this, createMtpDevHandleFromFd(fd), true);
++}
++
++MtpServer::MtpServer(IMtpHandle* handle, MtpDatabase* database, bool ptp,
++                    int fileGroup, int filePerm, int directoryPerm)
++    :   mFD(-1),
++        mDatabase(database),
++        mPtp(ptp),
++        mFileGroup(fileGroup),
++        mFilePermission(filePerm),
++        mDirectoryPermission(directoryPerm),
++        mSessionID(0),
++        mSessionOpen(false),
++        mSendObjectHandle(kInvalidObjectHandle),
++        mSendObjectFormat(0),
++        mSendObjectFileSize(0)
++{
++    setMtpHandle(this, handle, false);
+ }
+ 
+ MtpServer::~MtpServer() {
++    clearMtpHandle(this);
+ }
+ 
+ void MtpServer::addStorage(MtpStorage* storage) {
+@@ -165,13 +226,21 @@ void MtpServer::stop() {
+ }
+ 
+ void MtpServer::run() {
+-    int fd = mFD;
++    if (mtpHandle(this) == NULL) {
++        errno = ENODEV;
++        PLOG(ERROR) << "MTP transport was not configured";
++        return;
++    }
++    if (mtpHandle(this)->start(mPtp) < 0) {
++        PLOG(ERROR) << "MTP transport start failed";
++        return;
++    }
+ 
+-    VLOG(1) << "MtpServer::run fd: " << fd;
++    VLOG(1) << "MtpServer::run";
+ 
+     mRunning = true;
+     while (mRunning) {
+-        int ret = mRequest.read(fd);
++        int ret = mRequest.read(mtpHandle(this));
+         if (ret < 0) {
+             PLOG(ERROR) << "request read returned " << ret;
+             if (errno == ECANCELED) {
+@@ -192,7 +261,7 @@ void MtpServer::run() {
+                     || operation == MTP_OPERATION_SET_OBJECT_PROP_VALUE
+                     || operation == MTP_OPERATION_SET_DEVICE_PROP_VALUE);
+         if (dataIn) {
+-            int ret = mData.read(fd);
++            int ret = mData.read(mtpHandle(this));
+             if (ret < 0) {
+                 PLOG(ERROR) << "data read returned " << ret;
+                 if (errno == ECANCELED) {
+@@ -213,7 +282,7 @@ void MtpServer::run() {
+                 mData.setTransactionID(transaction);
+                 VLOG(2) << "sending data:";
+                 mData.dump();
+-                ret = mData.write(fd);
++                ret = mData.write(mtpHandle(this));
+                 if (ret < 0) {
+                     PLOG(ERROR) << "request write returned " << ret;
+                     if (errno == ECANCELED) {
+@@ -227,7 +296,7 @@ void MtpServer::run() {
+             mResponse.setTransactionID(transaction);
+             VLOG(2) << "sending response "
+                     << std::hex << mResponse.getResponseCode() << std::dec;
+-            ret = mResponse.write(fd);
++            ret = mResponse.write(mtpHandle(this));
+             const int savedErrno = errno;
+             mResponse.dump();
+             if (ret < 0) {
+@@ -255,8 +324,7 @@ void MtpServer::run() {
+ 
+     if (mSessionOpen)
+         mDatabase->sessionEnded();
+-    close(fd);
+-    mFD = -1;
++    mtpHandle(this)->close();
+ }
+ 
+ void MtpServer::sendObjectAdded(MtpObjectHandle handle) {
+@@ -300,7 +368,7 @@ void MtpServer::sendEvent(MtpEventCode code,
+         mEvent.setParameter(1, param1);
+         mEvent.setParameter(2, param2);
+         mEvent.setParameter(3, param3);
+-        int ret = mEvent.write(mFD);
++        int ret = mEvent.write(mtpHandle(this));
+         VLOG(2) << "mEvent.write returned " << ret;
+     }
+ }
+@@ -820,7 +888,7 @@ MtpResponseCode MtpServer::doGetObject() {
+     mfr.transaction_id = mRequest.getTransactionID();
+ 
+     // then transfer the file
+-    int ret = ioctl(mFD, MTP_SEND_FILE_WITH_HEADER, (unsigned long)&mfr);
++    int ret = mtpHandle(this)->sendFile(mfr);
+     if (ret < 0) {
+         if (errno == ECANCELED) {
+             result = MTP_RESPONSE_TRANSACTION_CANCELLED;
+@@ -846,7 +914,7 @@ MtpResponseCode MtpServer::doGetThumb() {
+         // send data
+         mData.setOperationCode(mRequest.getOperationCode());
+         mData.setTransactionID(mRequest.getTransactionID());
+-        mData.writeData(mFD, thumb, thumbSize);
++        mData.writeData(mtpHandle(this), thumb, thumbSize);
+         free(thumb);
+         return MTP_RESPONSE_OK;
+     } else {
+@@ -899,7 +967,7 @@ MtpResponseCode MtpServer::doGetPartialObject(MtpOperationCode operation) {
+     mResponse.setParameter(1, length);
+ 
+     // transfer the file
+-    int ret = ioctl(mFD, MTP_SEND_FILE_WITH_HEADER, (unsigned long)&mfr);
++    int ret = mtpHandle(this)->sendFile(mfr);
+     VLOG(2) << "MTP_SEND_FILE_WITH_HEADER returned " << ret;
+     result = MTP_RESPONSE_OK;
+     if (ret < 0) {
+@@ -1034,7 +1102,7 @@ MtpResponseCode MtpServer::doSendObject() {
+     }
+ 
+     // read the header, and possibly some data
+-    ret = mData.read(mFD);
++    ret = mData.read(mtpHandle(this));
+     if (ret < MTP_CONTAINER_HEADER_SIZE) {
+         result = MTP_RESPONSE_GENERAL_ERROR;
+         goto done;
+@@ -1074,7 +1142,7 @@ MtpResponseCode MtpServer::doSendObject() {
+ 
+             VLOG(2) << "receiving " << mSendObjectFilePath.c_str();
+             // transfer the file
+-            ret = ioctl(mFD, MTP_RECEIVE_FILE, (unsigned long)&mfr);
++            ret = mtpHandle(this)->receiveFile(mfr, false);
+             if ((ret < 0) && (errno == ECANCELED)) {
+                 isCanceled = true;
+             }
+@@ -1269,7 +1337,7 @@ MtpResponseCode MtpServer::doSendPartialObject() {
+             << " " << offset << " " << length;
+ 
+     // read the header, and possibly some data
+-    int ret = mData.read(mFD);
++    int ret = mData.read(mtpHandle(this));
+     if (ret < MTP_CONTAINER_HEADER_SIZE)
+         return MTP_RESPONSE_GENERAL_ERROR;
+     int initialData = ret - MTP_CONTAINER_HEADER_SIZE;
+@@ -1291,7 +1359,7 @@ MtpResponseCode MtpServer::doSendPartialObject() {
+             mfr.length = length;
+ 
+             // transfer the file
+-            ret = ioctl(mFD, MTP_RECEIVE_FILE, (unsigned long)&mfr);
++            ret = mtpHandle(this)->receiveFile(mfr, false);
+             if ((ret < 0) && (errno == ECANCELED)) {
+                 isCanceled = true;
+             }

@@ -1,0 +1,223 @@
+diff --git a/mtp-configfs/mtp-configfs b/mtp-configfs/mtp-configfs
+index 1db9cb4..ddc800b 100755
+--- a/mtp-configfs/mtp-configfs
++++ b/mtp-configfs/mtp-configfs
+@@ -8,6 +8,9 @@ CONFIGNAME="c.1"
+ USBMODE=rndis
+ RNDISCONFIG=rndis.rndis
+ MTPCONFIG=mtp.gs0
++MTPFFSNAME=droidian_mtp
++MTPFFSPATH=/dev/usb-ffs/mtp
++MTPBACKEND=auto
+ METHOD=configfs
+ 
+ IDVENDOR="0x2717"
+@@ -40,10 +43,6 @@ else
+    exit 0
+ fi
+ 
+-if [ "$METHOD" = "configfs" ]; then
+-    rm -rf $GADGETDIR/configs/$CONFIGNAME 2> /dev/null
+-fi
+-
+ while read line; do
+     if ! [[ $line == *=* ]]; then
+         continue
+@@ -63,50 +62,132 @@ done < $CONFIG_FILE
+ # First argument overrides the USBMODE
+ [ -z "${1}" ] || USBMODE="${1}"
+ 
++# A FunctionFS function instance ffs.NAME must be mounted using NAME.
++# When a device explicitly sets MTPCONFIG=ffs.NAME, keep both names in sync.
++if [[ "$MTPCONFIG" == ffs.* ]]; then
++    MTPFFSNAME="${MTPCONFIG#ffs.}"
++fi
++MTPFFSCONFIG="ffs.$MTPFFSNAME"
++
++# Do not touch configfs at all for android_usb devices.  For configfs, unbind
++# before replacing the active configuration so mode switches are deterministic.
++if [ "$METHOD" = "configfs" ]; then
++    if [ -f "$GADGETDIR/UDC" ]; then
++        printf "" > "$GADGETDIR/UDC"
++    fi
++    rm -rf $GADGETDIR/configs/$CONFIGNAME 2> /dev/null
++fi
++
+ # kill DHCP server if running
+ pid=$(cat /run/hybris-usb/dhcpd4.pid 2>/dev/null)
+ kill $pid 2>/dev/null
+ 
+ if [ "$USBMODE" = "mtp" ]; then
+     if [ "$METHOD" = "configfs" ]; then
+-        if [ ! -e "$GADGETDIR/functions/$MTPCONFIG" ]; then
+-            if ! mount | grep -q "$CONFIGFS"; then
+-                mount -t configfs none $CONFIGFS
+-                mkdir -p $GADGETDIR/strings/0x409
+-                mkdir -p $GADGETDIR/functions/$RNDISCONFIG
+-                mkdir -p $GADGETDIR/functions/rndis.usb0
+-                mkdir -p $GADGETDIR/functions/rndis_bam.rndis
+-                mkdir -p $GADGETDIR/configs/$CONFIGNAME/strings/0x409
+-            fi
++        if ! mount | grep -q "$CONFIGFS"; then
++            mount -t configfs none $CONFIGFS
++            mkdir -p $GADGETDIR/functions/$RNDISCONFIG
++            mkdir -p $GADGETDIR/functions/rndis.usb0
++            mkdir -p $GADGETDIR/functions/rndis_bam.rndis
++        fi
++
++        mkdir -p $GADGETDIR/strings/0x409
++        mkdir -p $GADGETDIR/configs/$CONFIGNAME/strings/0x409
+ 
+-            printf "$IDVENDOR" > $GADGETDIR/idVendor
+-            printf "$IDPRODUCT" > $GADGETDIR/idProduct
+-            printf "$BCDDEVICE" > $GADGETDIR/bcdDevice
+-            printf "$BCDUSB" > $GADGETDIR/bcdUSB
+-            printf "1" > $GADGETDIR/os_desc/use
+-            printf "0x1" > $GADGETDIR/os_desc/b_vendor_code
+-            printf "MSFT100" > $GADGETDIR/os_desc/qw_sign
+-            printf "$SERIALNUMBER" > $GADGETDIR/strings/0x409/serialnumber
+-            printf "$MANUFACTURER" > $GADGETDIR/strings/0x409/manufacturer
+-            printf "$PRODUCT" > $GADGETDIR/strings/0x409/product
++        printf "$IDVENDOR" > $GADGETDIR/idVendor
++        printf "$IDPRODUCT" > $GADGETDIR/idProduct
++        printf "$BCDDEVICE" > $GADGETDIR/bcdDevice
++        printf "$BCDUSB" > $GADGETDIR/bcdUSB
++        printf "$SERIALNUMBER" > $GADGETDIR/strings/0x409/serialnumber
++        printf "$MANUFACTURER" > $GADGETDIR/strings/0x409/manufacturer
++        printf "$PRODUCT" > $GADGETDIR/strings/0x409/product
+ 
+-            mkdir -p $GADGETDIR/functions/$MTPCONFIG
+-            ln -s $GADGETDIR/configs/$CONFIGNAME $GADGETDIR/os_desc/$CONFIGNAME
++        MTPFUNCTION="$MTPCONFIG"
++        MTP_USE_FFS=false
++
++        case "$MTPBACKEND" in
++            functionfs|ffs)
++                MTP_USE_FFS=true
++                ;;
++            legacy)
++                MTP_USE_FFS=false
++                ;;
++            auto)
++                # Qualcomm/Android vendors commonly advertise the intended MTP
++                # transport with this property.  Honor it before probing the
++                # legacy function so modern devices do not emit a false error.
++                if [[ "$MTPCONFIG" == ffs.* ]] || [ "$(getprop vendor.usb.use_ffs_mtp)" = "1" ]; then
++                    MTP_USE_FFS=true
++                fi
++                ;;
++            *)
++                echo "Unknown MTPBACKEND: $MTPBACKEND" >&2
++                exit 1
++                ;;
++        esac
++
++        if [ "$MTP_USE_FFS" = "true" ]; then
++            MTPFUNCTION="$MTPFFSCONFIG"
++            mkdir -p "$GADGETDIR/functions/$MTPFUNCTION" || exit 1
++        elif [ ! -e "$GADGETDIR/functions/$MTPFUNCTION" ]; then
++            if ! mkdir "$GADGETDIR/functions/$MTPFUNCTION"; then
++                if [ "$MTPBACKEND" != "auto" ]; then
++                    exit 1
++                fi
++                MTP_USE_FFS=true
++                MTPFUNCTION="$MTPFFSCONFIG"
++                mkdir -p "$GADGETDIR/functions/$MTPFUNCTION" || exit 1
++            fi
++        fi
+ 
+-            chown root:plugdev $GADGETDIR
+-            chown root:plugdev $GADGETDIR/configs
+-            chown root:plugdev $GADGETDIR/configs/$CONFIGNAME
++        # Microsoft OS descriptors are needed for Windows MTP discovery for
++        # both the legacy mtp function and FunctionFS.
++        printf "1" > $GADGETDIR/os_desc/use
++        printf "0x1" > $GADGETDIR/os_desc/b_vendor_code
++        printf "MSFT100" > $GADGETDIR/os_desc/qw_sign
++        ln -sfnT "$GADGETDIR/configs/$CONFIGNAME" "$GADGETDIR/os_desc/$CONFIGNAME"
++
++        if [ "$MTP_USE_FFS" = "true" ]; then
++            mkdir -p "$MTPFFSPATH"
++            MTP_FFS_MOUNT=$(awk -v path="$MTPFFSPATH" '$2 == path && $3 == "functionfs" { print $1; exit }' /proc/mounts)
++            if [ -n "$MTP_FFS_MOUNT" ] && [ "$MTP_FFS_MOUNT" != "$MTPFFSNAME" ]; then
++                echo "FunctionFS mount $MTPFFSPATH belongs to $MTP_FFS_MOUNT, expected $MTPFFSNAME" >&2
++                exit 1
++            fi
++            if [ -z "$MTP_FFS_MOUNT" ]; then
++                MTP_UID=$(id -u droidian)
++                MTP_GID=$(id -g droidian)
++                mount -t functionfs -o "uid=$MTP_UID,gid=$MTP_GID,rmode=0770,fmode=0660,no_disconnect=1" "$MTPFFSNAME" "$MTPFFSPATH" || exit 1
++            fi
+ 
++            MTP_FFS_READY=false
++            for _ in $(seq 1 300); do
++                if [ -e "$MTPFFSPATH/ep1" ] && [ -e "$MTPFFSPATH/ep2" ] && [ -e "$MTPFFSPATH/ep3" ]; then
++                    MTP_FFS_READY=true
++                    break
++                fi
++                sleep 0.1
++            done
++            if [ "$MTP_FFS_READY" != "true" ]; then
++                echo "MTP FunctionFS userspace did not configure endpoints" >&2
++                exit 1
++            fi
++        else
+             chown root:plugdev /dev/mtp_usb
+             chmod 660 /dev/mtp_usb
++            printf "$USBMODE" > "$GADGETDIR/functions/$MTPFUNCTION/os_desc/interface.MTP/compatible_id"
+         fi
+ 
++        chown root:plugdev $GADGETDIR
++        chown root:plugdev $GADGETDIR/configs
++        chown root:plugdev $GADGETDIR/configs/$CONFIGNAME
++
+         rm -f $GADGETDIR/configs/$CONFIGNAME/$MTPCONFIG
++        rm -f $GADGETDIR/configs/$CONFIGNAME/$MTPFFSCONFIG
+         rm -f $GADGETDIR/configs/$CONFIGNAME/$RNDISCONFIG
+         rm -f $GADGETDIR/configs/$CONFIGNAME/rndis.usb0
+         rm -f $GADGETDIR/configs/$CONFIGNAME/rndis_bam.rndis
+ 
+-        printf "$USBMODE" > $GADGETDIR/functions/$MTPCONFIG/os_desc/interface.MTP/compatible_id
+         if [ "$IS_EXYNOS" = "true" ]; then
+             printf "Conf 1" > $GADGETDIR/configs/c.1/strings/0x409/configuration
+             printf "0x3f" > $GADGETDIR/configs/c.1/MaxPower
+@@ -114,8 +195,7 @@ if [ "$USBMODE" = "mtp" ]; then
+             printf "$USBMODE" > $GADGETDIR/configs/$CONFIGNAME/strings/0x409/configuration
+         fi
+ 
+-        ln -s $GADGETDIR/functions/$MTPCONFIG $GADGETDIR/configs/$CONFIGNAME
+-        printf "1" > $GADGETDIR/os_desc/use
++        ln -s $GADGETDIR/functions/$MTPFUNCTION $GADGETDIR/configs/$CONFIGNAME
+         if [ "$IS_EXYNOS" = "true" ]; then
+             printf "0" > $ANDROID_USB/enable
+             printf "0x6860" > $GADGETDIR/idProduct
+@@ -150,6 +230,7 @@ if [ "$USBMODE" = "mtp" ]; then
+ elif [ "$USBMODE" = "rndis" ]; then
+     if [ "$METHOD" = "configfs" ]; then
+         rm -f $GADGETDIR/configs/$CONFIGNAME/$MTPCONFIG
++        rm -f $GADGETDIR/configs/$CONFIGNAME/$MTPFFSCONFIG
+         rm -f $GADGETDIR/configs/$CONFIGNAME/$RNDISCONFIG
+         rm -f $GADGETDIR/configs/$CONFIGNAME/rndis.usb0
+         rm -f $GADGETDIR/configs/$CONFIGNAME/rndis_bam.rndis
+@@ -227,6 +308,7 @@ elif [ "$USBMODE" = "rndis" ]; then
+ elif [ "$USBMODE" = "none" ]; then
+     if [ "$METHOD" = "configfs" ]; then
+         rm -f $GADGETDIR/configs/$CONFIGNAME/$MTPCONFIG
++        rm -f $GADGETDIR/configs/$CONFIGNAME/$MTPFFSCONFIG
+         rm -f $GADGETDIR/configs/$CONFIGNAME/$RNDISCONFIG
+         rm -f $GADGETDIR/configs/$CONFIGNAME/rndis.usb0
+         rm -f $GADGETDIR/configs/$CONFIGNAME/rndis_bam.rndis
+diff --git a/mtp-configfs/mtp-configfs.conf b/mtp-configfs/mtp-configfs.conf
+index 5b3f17f..94d44a4 100644
+--- a/mtp-configfs/mtp-configfs.conf
++++ b/mtp-configfs/mtp-configfs.conf
+@@ -6,6 +6,9 @@ CONFIGNAME="c.1"
+ USBMODE=rndis
+ RNDISCONFIG=rndis.rndis
+ MTPCONFIG=mtp.gs0
++MTPFFSNAME=droidian_mtp
++MTPFFSPATH=/dev/usb-ffs/mtp
++MTPBACKEND=auto
+ IDVENDOR="0x2717"
+ IDPRODUCT="0xFF20"
+ BCDDEVICE="0x0223"
